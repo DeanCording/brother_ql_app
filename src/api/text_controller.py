@@ -8,9 +8,18 @@ from typing import Dict, Any
 from src.services.printer_service import printer_service
 from src.services.queue_service import print_queue
 from src.services.settings_service import settings_service
+<<<<<<< HEAD
 from src.utils.exceptions import (AppError, ValidationError, PrinterError, ResourceNotFoundError,
                                   ConfirmationRequiredError, internal_error)
 from src.utils.print_guard import enforce_large_batch_confirmation, is_confirmed
+=======
+from src.utils.exceptions import ValidationError, PrinterError, ResourceNotFoundError, ConfirmationRequiredError
+from src.utils.print_guard import (
+    enforce_large_batch_confirmation,
+    enforce_media_match,
+    is_confirmed,
+)
+>>>>>>> e92168b (Report media errors and refuse jobs the printer would silently discard)
 from src.utils.dry_run import is_dry_run, build_dry_run_response
 from src.utils.formatting import short_label
 
@@ -44,6 +53,11 @@ def print_text(body: Dict[str, Any]) -> Dict[str, Any]:
         for setting in required_settings:
             if setting not in settings:
                 raise ValidationError(f"{setting} is required", f"settings.{setting}")
+
+        # Reject a label size the loaded media cannot print, before the job
+        # is queued -- printing is asynchronous, so an error raised during
+        # the print never reaches the caller.
+        enforce_media_match(settings)
 
         # Large batches require explicit confirmation before enqueuing.
         enforce_large_batch_confirmation(

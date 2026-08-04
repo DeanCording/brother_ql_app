@@ -3,6 +3,7 @@ Printer service for managing Brother QL printer operations.
 """
 
 import os
+import re
 import sys
 import io
 import base64
@@ -21,6 +22,7 @@ from brother_ql.raster import BrotherQLRaster
 from brother_ql.conversion import convert
 from brother_ql.devicedependent import label_type_specs, right_margin_addition
 from brother_ql.backends import backend_factory, guess_backend
+from brother_ql.reader import interpret_response
 
 from src.config.default_settings import (
     BLEED_LIMIT_MM,
@@ -140,6 +142,13 @@ MIN_CALIBRATION_FONT_PX = 14
 # more than the registration tolerance this feature exists to cancel out.
 MAX_CALIBRATION_SWEEP_STEPS = 9
 
+# USB interface class 7 is "printer"; the QL enumerates as mass storage (class 8)
+# while Editor Lite mode is on, in which case it is invisible as a printer.
+PRINTER_INTERFACE_CLASS = 7
+# The QL answers a status request with exactly 32 bytes.
+STATUS_PACKET_BYTES = 32
+# The printer needs a moment between the request and having the reply ready.
+STATUS_READ_SETTLE_SECONDS = 0.5
 
 # --------------------------------------------------------------------------- #
 # How big an uploaded image may be before it is turned away.
@@ -2542,6 +2551,154 @@ class PrinterService:
         configured = settings.get("label_size")
         return str(configured) if configured else None
 
+    def read_usb_printer_status(printer_uri: str, timeout_ms: int = 5000):
+        """Ask a USB-attached QL what media is loaded and whether it reports errors.
+
+        The QL series answers an ``ESC i S`` status request with a 32-byte packet
+        describing the media actually in the machine, which
+        ``brother_ql.reader.interpret_response`` decodes.
+
+        This matters because the printer SILENTLY DISCARDS a job whose label size
+        does not match the loaded roll: the write succeeds, the log says the job was
+        sent, and no label appears. That is indistinguishable from a hardware fault,
+        so reading the status is the only way to tell the two apart.
+
+        Network printers are handled separately via IPP; only the pyusb backend can
+        do this bidirectional read.
+
+        Returns the decoded dict (media_type, media_width, media_length, errors,
+        phase_type, status_type), or None if the printer could not be reached or
+        did not answer.
+        """
+        import usb.core
+        import usb.util
+
+        match = re.match(
+            r"usb://(0x[0-9a-fA-F]+):(0x[0-9a-fA-F]+)(?:/(.+))?$", printer_uri or "")
+        if not match:
+            return None
+
+        find_kwargs = {
+            "idVendor": int(match.group(1), 16),
+            "idProduct": int(match.group(2), 16),
+        }
+        if match.group(3):
+            find_kwargs["serial_number"] = match.group(3)
+
+        device = usb.core.find(**find_kwargs)
+        if device is None:
+            return None
+
+        interface = endpoint_out = endpoint_in = None
+        detached = False
+        try:
+            for candidate in device.get_active_configuration():
+                if candidate.bInterfaceClass != PRINTER_INTERFACE_CLASS:
+                    continue
+                endpoint_out = usb.util.find_descriptor(
+                    candidate,
+                    custom_match=lambda e: (
+                        usb.util.endpoint_direction(e.bEndpointAddress)
+                        == usb.util.ENDPOINT_OUT
+                        and usb.util.endpoint_type(e.bmAttributes)
+                        == usb.util.ENDPOINT_TYPE_BULK
+                    ),
+                )
+                endpoint_in = usb.util.find_descriptor(
+                    candidate,
+                    custom_match=lambda e: (
+                        usb.util.endpoint_direction(e.bEndpointAddress)
+                        == usb.util.ENDPOINT_IN
+                        and usb.util.endpoint_type(e.bmAttributes)
+                        == usb.util.ENDPOINT_TYPE_BULK
+                    ),
+                )
+                if endpoint_out is not None and endpoint_in is not None:
+                    interface = candidate
+                    break
+            if interface is None:
+                return None
+
+            # Linux's usblp driver claims printers on sight; pyusb cannot use the
+            # interface until it is released.
+            try:
+                if device.is_kernel_driver_active(interface.bInterfaceNumber):
+                    device.detach_kernel_driver(interface.bInterfaceNumber)
+                    detached = True
+            except Exception:
+                pass
+            usb.util.claim_interface(device, interface.bInterfaceNumber)
+
+            # Invalidate, initialise, then request status -- the same preamble
+            # brother_ql sends ahead of a job.
+            endpoint_out.write(b"\x00" * 200, timeout=timeout_ms)
+            endpoint_out.write(b"\x1b\x40", timeout=timeout_ms)
+            endpoint_out.write(b"\x1b\x69\x53", timeout=timeout_ms)
+            time.sleep(STATUS_READ_SETTLE_SECONDS)
+            raw = bytes(endpoint_in.read(STATUS_PACKET_BYTES, timeout=timeout_ms))
+            if len(raw) < STATUS_PACKET_BYTES:
+                return None
+            return interpret_response(raw)
+
+        except Exception as e:
+            logger.warning("Could not read USB printer status",
+                        printer_uri=printer_uri, error=str(e))
+            return None
+        finally:
+            try:
+                if interface is not None:
+                    usb.util.release_interface(device, interface.bInterfaceNumber)
+                usb.util.dispose_resources(device)
+                if detached:
+                    device.attach_kernel_driver(interface.bInterfaceNumber)
+            except Exception:
+                pass
+
+
+    def describe_media_mismatch(label_size: Optional[str], status: Optional[Dict[str, Any]]):
+        """Return why ``label_size`` cannot print on the reported media, else None.
+
+        Width is the load-bearing check: the printer refuses, silently, when the
+        requested roll is not the one installed. Continuous-versus-die-cut is also a
+        hard mismatch even at equal width (``62`` and ``62x29`` are both 62mm), as is
+        a die-cut length difference.
+        """
+        if not status or not label_size:
+            return None
+
+        loaded_width = status.get("media_width")
+        loaded_length = status.get("media_length")
+        if not loaded_width:
+            return "no media detected -- is a roll loaded and the cover closed?"
+
+        try:
+            from brother_ql.labels import ALL_LABELS
+        except Exception:
+            return None
+
+        label = next(
+            (l for l in ALL_LABELS if l.identifier == str(label_size)), None)
+        if label is None:
+            # Unknown identifier: convert() will report it more precisely.
+            return None
+
+        wanted_width, wanted_length = label.tape_size
+        if int(loaded_width) != int(wanted_width):
+            return (f"label {label_size} needs {wanted_width}mm tape but the printer "
+                    f"has {loaded_width}mm loaded")
+
+        # A media_length of 0 means continuous; die-cut reports its real length.
+        loaded_die_cut = bool(loaded_length)
+        wanted_die_cut = bool(wanted_length)
+        if loaded_die_cut != wanted_die_cut:
+            return (f"label {label_size} is "
+                    f"{'die-cut' if wanted_die_cut else 'continuous'} but the printer "
+                    f"has {'die-cut' if loaded_die_cut else 'continuous'} media loaded")
+        if wanted_die_cut and int(loaded_length) != int(wanted_length):
+            return (f"label {label_size} needs {wanted_width}x{wanted_length}mm but "
+                    f"the printer has {loaded_width}x{loaded_length}mm loaded")
+        return None
+
     def check_printer_status(self, printer_uri: str, printer_model: str,
                              label_size: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -2627,7 +2784,7 @@ class PrinterService:
                     media=media,
                     blocking_reasons=blocking,
                     label_size=label_size,
-                settings=settings,
+                    settings=settings,
                 )
             self._forget_media(printer_uri)
             if self._tcp_reachable(ip_address):
@@ -2642,7 +2799,7 @@ class PrinterService:
                     details=details,
                     media_unavailable=MEDIA_DETECTION_UNSUPPORTED,
                     label_size=label_size,
-                settings=settings,
+                    settings=settings,
                 )
             details["source"] = "tcp"
             if ipp.get("error"):
@@ -2662,6 +2819,81 @@ class PrinterService:
         try:
             backend = backend_factory(backend_type)["backend_class"](printer_uri)
             backend.dispose()
+
+            # Constructing the backend only proves the device is attached. Ask a
+            # USB printer what media is loaded too: "ready" is misleading when
+            # the roll does not match what the caller is about to print, and a
+            # mismatched job is discarded without a word.
+            live = self.read_usb_printer_status(printer_uri)
+
+            logger.info("USB Status:", live=live)
+
+            if live:
+                loaded_width = live.get("media_width")
+                loaded_length = live.get("media_length")
+                errors = live.get("errors") or []
+                details.update({
+                    "source": "usb-status",
+                    "media_type": live.get("media_type"),
+                    "media_width_mm": loaded_width,
+                    "media_length_mm": loaded_length,
+                    "phase": live.get("phase_type"),
+                    "errors": errors,
+                })
+
+                # Which label identifiers can actually print on what is loaded,
+                # so a UI can flag a mismatched selection instead of letting the
+                # job disappear.
+                try:
+                    from brother_ql.labels import ALL_LABELS
+                    details["loadable_label_sizes"] = [
+                        l.identifier for l in ALL_LABELS
+                        if l.tape_size[0] == loaded_width
+                        and bool(l.tape_size[1]) == bool(loaded_length)
+                        and (not loaded_length or l.tape_size[1] == loaded_length)
+                    ]
+                except Exception:
+                    pass
+
+                if errors:
+                    return self._status_response(
+                        reachable=True,
+                        state="blocked",
+                        status="Printer reports: " + ", ".join(errors),
+                        details=details,
+                        settings=settings,
+                    )
+                if not loaded_width:
+                    return self._status_response(
+                        reachable=True,
+                        state="blocked",
+                        status="No media detected",
+                        details=details,
+                        settings=settings,
+                    )
+
+                kind = ("continuous" if not loaded_length
+                        else f"x{loaded_length}mm die-cut")
+
+                media = dict(EMPTY_MEDIA)
+                media.update(
+                    width_mm=float(loaded_width),
+                    length_mm=float(loaded_length),
+                    media_type=live.get("media_type"),
+                    source="usb-status",
+                )
+
+                return self._status_response(
+                    reachable=True,
+                    state="ready",
+                    status="Printer is ready",
+                    details=details,
+                    media=media,
+                    label_size=label_size,
+                    settings=settings,
+                )
+
+
             return self._status_response(
                 reachable=True,
                 state="ready",
@@ -2671,6 +2903,12 @@ class PrinterService:
                 label_size=label_size,
                 settings=settings,
             )
+
+            return {
+                "available": True,
+                "status": "Printer is ready",
+                "details": details,
+            }
         except Exception as e:
             logger.error("Error checking printer status",
                         printer_uri=printer_uri,
@@ -5323,6 +5561,30 @@ class PrinterService:
         # which classifies everything it catches as a printer error.
         bleed = get_label_bleed(settings, label_size, warn=True)
         self._reject_transposed_die_cut(image_path, settings, bleed)
+
+        # Refuse a job the loaded media cannot print, instead of letting the
+        # printer discard it in silence.
+        #
+        # A QL given a label_size that does not match the roll installed
+        # accepts the bytes and produces nothing: no error, no paper, and a
+        # log line saying the job was sent. Asking the printer what media it
+        # has turns that into an explanation. This is a printer-state fault
+        # rather than a caller mistake, hence PrinterError and not
+        # ValidationError. USB only -- network printers report through IPP.
+
+        # TODO - Fix this to work
+
+        """ usb_status = self.read_usb_printer_status(printer_uri)
+        if usb_status:
+            reported_errors = usb_status.get("errors") or []
+            if reported_errors:
+                raise PrinterError(
+                    "printer reports: " + ", ".join(reported_errors))
+            mismatch = self.describe_media_mismatch(label_size, usb_status)
+            if mismatch:
+                raise PrinterError(
+                    f"{mismatch}. Load the matching roll, or choose a label "
+                    f"size that fits the media already in the printer.") """
 
         # --- Printer/IO phase (-> PrinterError -> 500) ---
         try:
