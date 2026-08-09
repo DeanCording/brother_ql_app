@@ -1942,7 +1942,11 @@ const JOB_STATUS_META = {
     printing:  { label: 'Printing',  cls: 'printing' },
     done:      { label: 'Done',      cls: 'done' },
     failed:    { label: 'Failed',    cls: 'failed' },
-    cancelled: { label: 'Cancelled', cls: 'cancelled' }
+    cancelled: { label: 'Cancelled', cls: 'cancelled' },
+    // Held jobs are waiting for a human, not for the worker. Without an entry
+    // here the badge fell back to the raw status string styled as "queued",
+    // which read as though it were about to print by itself.
+    held:      { label: 'Held',      cls: 'held' }
 };
 
 // What a job is doing right now, alongside (not instead of) its status: a job
@@ -2167,6 +2171,12 @@ function renderJobs(jobs) {
         const reprintBtns = job.can_reprint === true
             ? `<button type="button" class="btn-ghost btn-sm queue-reprint" data-action="reprint" data-job-id="${escapeHtml(job.id)}"><i class="bi bi-arrow-clockwise"></i> Reprint</button>` +
               openBtn
+            : '';
+        // Print is the whole point of holding: it releases the job through the
+        // normal print path, where the media guard runs against whatever roll
+        // is loaded NOW rather than at hold time.
+        const releaseBtn = job.can_release === true
+            ? `<button type="button" class="btn-ghost btn-sm queue-release" data-action="release" data-job-id="${escapeHtml(job.id)}"><i class="bi bi-printer"></i> Print</button>`
             : '';
         // Delete is available for any job that is not currently printing.
         const deleteBtn = job.status !== 'printing'
@@ -2687,6 +2697,36 @@ function confirmDialog(message, options = {}) {
  * Asks the user to confirm before re-queuing.
  * @param {string} jobId
  */
+async function releaseJob(jobId) {
+    const confirmed = await confirmDialog(
+        'Print this held label now?',
+        { title: 'Print Held Label', confirmLabel: 'Print' });
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch(`/api/v1/jobs/${encodeURIComponent(jobId)}/release`, {
+            method: 'POST'
+        });
+        if (!response.ok) {
+            let message = `Error: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                // The media guard runs at release, so a roll mismatch surfaces
+                // here rather than at submit. Its message names the loaded roll,
+                // which is the useful part -- do not flatten it to a status code.
+                message = errorData.message || errorData.error || message;
+            } catch (e) { /* non-JSON body */ }
+            throw new Error(message);
+        }
+        showNotification('Queued for printing', 'success');
+    } catch (error) {
+        console.error('Error releasing job:', error);
+        showNotification(`Could not print: ${error.message}`, 'error');
+    } finally {
+        refreshJobs();
+    }
+}
+
 async function reprintJob(jobId) {
     const confirmed = await confirmDialog('Really reprint this job?', {
         title: 'Reprint Job',

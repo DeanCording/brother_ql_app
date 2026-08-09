@@ -20,7 +20,7 @@ from src.utils.pillow_patch import apply_pillow_patch
 from src.utils.request_limits import MaxBodySizeMiddleware
 
 from src.utils.auth import auth_enabled, is_valid_api_key, API_KEY_HEADER
-from src.utils.oidc import register_oidc
+from src.utils.oidc import current_user, oidc_enabled, register_oidc
 from src.services.printer_service import printer_service
 from src.services.settings_service import settings_service
 from src.services.queue_service import print_queue
@@ -256,20 +256,19 @@ def register_auth(app):
             return None
 
         provided = request.headers.get(API_KEY_HEADER)
-        if not is_valid_api_key(provided):
-            # Answered in the same Error shape as everything else. This used to
-            # be `{"error": "unauthorized"}` -- a fifth wheel that no client
-            # could parse with the same code path as the other four responses.
-            # Naming the header is safe (it is in the published specification)
-            # and saves the caller a round of guessing; whether a key was sent
-            # at all, or was merely wrong, is deliberately not distinguished.
-            return jsonify(build_error_body(
-                "UNAUTHORIZED",
-                "A valid API key is required for this endpoint",
-                {"header": API_KEY_HEADER},
-            )), 401
+        if is_valid_api_key(provided):
+            return None
 
-        return None
+        # A signed-in human is an identity too. Without this the two schemes
+        # are one-directional: the OIDC gate accepts an API key as already
+        # authenticated, but this hook ran first and rejected a browser session
+        # before that gate was ever reached -- so every call the bundled UI
+        # makes to /api/v1/* came back 401 and the UI looked empty rather than
+        # broken. Defer instead, and let the OIDC gate decide.
+        if oidc_enabled() and current_user():
+            return None
+
+        return jsonify({"error": "unauthorized"}), 401
 
 
 def register_routes(app):
