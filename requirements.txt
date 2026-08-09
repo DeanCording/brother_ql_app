@@ -25,5 +25,13 @@ pypdfium2==5.12.1
 gunicorn==26.0.0
 uvicorn==0.52.1
 
+# OIDC token exchange. Was already present transitively (connexion pulls it in
+# for the Swagger UI), but src/utils/oidc.py imports it directly, so declare it
+# rather than rely on someone else's dependency staying put.
+#
+# A floor rather than a pin: the image already resolves a newer release, and
+# pinning here would silently downgrade it on the next rebuild.
+requests>=2.32.3
+
 # Logging and error handling
 structlog==26.1.0
