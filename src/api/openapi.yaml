@@ -7,7 +7,7 @@ info:
   version: 4.0.3
   contact:
     name: Brother QL Printer App Support
-    url: https://github.com/dodoooh/brother_ql_app/issues
+    url: https://github.com/deancording/brother_ql_app/issues
 
 servers:
   - url: /api/v1
@@ -414,6 +414,14 @@ paths:
                     and enforced at release, against whatever roll is loaded
                     then.
                   example: "true"
+                amend_job_id:
+                  type: string
+                  description: >-
+                    Id of a HELD job to replace instead of creating a new one.
+                    With hold=true the job is updated and stays held; without
+                    it the job is updated and then printed, so the held entry
+                    becomes the printed entry rather than being orphaned.
+                  example: "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d"
                 dry_run:
                   type: string
                   description: >-
@@ -623,6 +631,14 @@ paths:
                     and enforced at release, against whatever roll is loaded
                     then.
                   example: "true"
+                amend_job_id:
+                  type: string
+                  description: >-
+                    Id of a HELD job to replace instead of creating a new one.
+                    With hold=true the job is updated and stays held; without
+                    it the job is updated and then printed, so the held entry
+                    becomes the printed entry rather than being orphaned.
+                  example: "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d"
                 dry_run:
                   type: string
                   description: >-
@@ -947,6 +963,14 @@ paths:
                     and enforced at release, against whatever roll is loaded
                     then.
                   example: "true"
+                amend_job_id:
+                  type: string
+                  description: >-
+                    Id of a HELD job to replace instead of creating a new one.
+                    With hold=true the job is updated and stays held; without
+                    it the job is updated and then printed, so the held entry
+                    becomes the printed entry rather than being orphaned.
+                  example: "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d"
                 dry_run:
                   type: string
                   description: >-
@@ -1641,6 +1665,7 @@ paths:
                         example: 4
         '500':
           $ref: '#/components/responses/InternalServerError'
+
 
 components:
   # The global `security:` above references this scheme so the Swagger UI shows
@@ -2749,6 +2774,13 @@ components:
             skipped here and enforced at release, against whatever roll is
             loaded then.
           default: false
+        amend_job_id:
+          type: string
+          description: >-
+            Id of a HELD job to replace instead of creating a new one. With
+            hold=true the job is updated and stays held; without it the job is
+            updated and then printed, so the held entry becomes the printed
+            entry rather than being orphaned.
         dry_run:
           type: boolean
           description: >-
@@ -2854,6 +2886,13 @@ components:
             skipped here and enforced at release, against whatever roll is
             loaded then.
           default: false
+        amend_job_id:
+          type: string
+          description: >-
+            Id of a HELD job to replace instead of creating a new one. With
+            hold=true the job is updated and stays held; without it the job is
+            updated and then printed, so the held entry becomes the printed
+            entry rather than being orphaned.
         dry_run:
           type: boolean
           description: >-
@@ -2959,6 +2998,13 @@ components:
             skipped here and enforced at release, against whatever roll is
             loaded then.
           default: false
+        amend_job_id:
+          type: string
+          description: >-
+            Id of a HELD job to replace instead of creating a new one. With
+            hold=true the job is updated and stays held; without it the job is
+            updated and then printed, so the held entry becomes the printed
+            entry rather than being orphaned.
         dry_run:
           type: boolean
           description: >-

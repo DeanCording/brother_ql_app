@@ -149,6 +149,7 @@ def print_text_image() -> Dict[str, Any]:
             "label", "Text+Image: " + short_label(text), job, settings,
             hold=request.form.get("hold"),
             confirm_large_batch=request.form.get("confirm_large_batch"),
+            amend_job_id=request.form.get("amend_job_id"),
             params=params, file_path=stored_path,
         )
     except ConfirmationRequiredError:

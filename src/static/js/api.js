@@ -12,6 +12,106 @@ const DIE_CUT_LABEL_PATTERN = /^(d\d+|\d+x\d+)$/;
 // in mm. Rectangular die-cut types ("62x29") deliberately do not match.
 const ROUND_LABEL_PATTERN = /^d(\d+)$/;
 
+// The held job currently open in the composer, or null.
+//
+// Set by openJob and cleared whenever the composer stops representing that job
+// -- printing it, saving it, or opening something else. While it is set the
+// submit buttons offer "Save changes" alongside "Print", and both carry
+// amend_job_id so the held entry is updated in place instead of a near-copy
+// being added next to it.
+let openedHeldJobId = null;
+
+/**
+ * Add amend_job_id to a request payload when a held job is open.
+ * @param {object} body   the request body being built
+ * @param {boolean} keepHeld  true to stay held (Save), false to print
+ */
+function withAmend(body, keepHeld) {
+    if (openedHeldJobId) {
+        body.amend_job_id = openedHeldJobId;
+        if (keepHeld) body.hold = true;
+    } else if (keepHeld) {
+        body.hold = true;
+    }
+    return body;
+}
+
+/**
+ * Same, for the multipart endpoints.
+ * @param {FormData} form
+ * @param {boolean} keepHeld
+ */
+function appendAmend(form, keepHeld) {
+    if (openedHeldJobId) form.append('amend_job_id', openedHeldJobId);
+    if (keepHeld) form.append('hold', 'true');
+    return form;
+}
+
+/**
+ * Stop treating the composer as editing a held job, and update the buttons.
+ */
+function clearOpenedJob() {
+    openedHeldJobId = null;
+    if (typeof refreshComposerMode === 'function') refreshComposerMode();
+}
+
+/**
+ * Show or hide the "editing a held label" affordances on every compose form.
+ *
+ * Injected rather than written into index.html five times: the forms differ
+ * only in their fields, and a Save button that must appear beside each of five
+ * submit buttons is exactly the sort of thing that rots when a sixth is added.
+ *
+ * The Save button is type=button and carries data-save-held, so the form's
+ * own submit handler (which prints) is not what runs; the click handler in
+ * core.js re-submits with hold=true instead.
+ */
+function refreshComposerMode() {
+    const editing = openedHeldJobId != null;
+
+    document.querySelectorAll('form').forEach(form => {
+        const submitBtn = form.querySelector('button[type="submit"].btn-print');
+        if (!submitBtn) return;
+
+        let saveBtn = form.querySelector('[data-save-held]');
+        let banner = form.querySelector('[data-editing-banner]');
+
+        if (!editing) {
+            if (saveBtn) saveBtn.remove();
+            if (banner) banner.remove();
+            if (submitBtn.dataset.printLabel) {
+                submitBtn.innerHTML = submitBtn.dataset.printLabel;
+                delete submitBtn.dataset.printLabel;
+            }
+            return;
+        }
+
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.setAttribute('data-editing-banner', '');
+            banner.className = 'editing-banner';
+            banner.innerHTML =
+                '<i class="bi bi-pencil-square"></i> Editing a held label — ' +
+                '<button type="button" class="btn-link" data-discard-held>' +
+                'stop editing</button>';
+            submitBtn.parentNode.insertBefore(banner, submitBtn);
+        }
+
+        if (!saveBtn) {
+            // Remember the print button's own wording so it can be restored.
+            submitBtn.dataset.printLabel = submitBtn.innerHTML;
+            submitBtn.innerHTML =
+                '<i class="bi bi-printer-fill"></i> Print now';
+
+            saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.setAttribute('data-save-held', '');
+            saveBtn.className = 'btn-print btn-secondary';
+            saveBtn.innerHTML = '<i class="bi bi-check2"></i> Save changes';
+            submitBtn.parentNode.insertBefore(saveBtn, submitBtn);
+        }
+    });
+
 /**
  * Diameter in mm of a round die-cut label type.
  * @param {string} labelSize - label type identifier, e.g. "d24" or "62x29"
@@ -597,6 +697,12 @@ async function handleTextPrint(event) {
             requestBody.confirm_large_batch = true;
         }
 
+        // Save-vs-print: withAmend adds amend_job_id when a held job is open,
+        // so either path updates that job rather than adding another.
+        const keepHeld = window.saveHeldOnly === true;
+        window.saveHeldOnly = false;
+        withAmend(requestBody, keepHeld);
+
         const response = await fetch('/api/v1/text/print', {
             method: 'POST',
             headers: {
@@ -615,8 +721,11 @@ async function handleTextPrint(event) {
 
         const data = await response.json();
 
-        showNotification('Added to print queue', 'success');
+        showNotification(data.held ? 'Held label updated' : 'Added to print queue',
+                         'success');
         console.log('Print result:', data);
+        // Printing ends the edit; saving keeps it open for another pass.
+        if (!keepHeld) clearOpenedJob();
         if (typeof refreshJobs === 'function') refreshJobs();
     } catch (error) {
         console.error('Error printing text:', error);
@@ -704,6 +813,9 @@ async function handleImagePrint(event) {
             formData.append('confirm_large_batch', 'true');
         }
 
+        const keepHeld = window.saveHeldOnly === true;
+        window.saveHeldOnly = false;
+        appendAmend(formData, keepHeld);
         const response = await fetch('/api/v1/image/print', {
             method: 'POST',
             body: formData
@@ -719,7 +831,8 @@ async function handleImagePrint(event) {
 
         const data = await response.json();
 
-        showNotification('Added to print queue', 'success');
+        showNotification(data.held ? 'Held label updated' : 'Added to print queue', 'success');
+        if (!keepHeld) clearOpenedJob();
         console.log('Print result:', data);
         if (typeof refreshJobs === 'function') refreshJobs();
     } catch (error) {
@@ -803,6 +916,9 @@ async function handlePdfPrint(event) {
             formData.append('confirm_large_batch', 'true');
         }
 
+        const keepHeld = window.saveHeldOnly === true;
+        window.saveHeldOnly = false;
+        appendAmend(formData, keepHeld);
         const response = await fetch('/api/v1/pdf/print', {
             method: 'POST',
             body: formData
@@ -818,7 +934,8 @@ async function handlePdfPrint(event) {
 
         const data = await response.json();
 
-        showNotification('Added to print queue', 'success');
+        showNotification(data.held ? 'Held label updated' : 'Added to print queue', 'success');
+        if (!keepHeld) clearOpenedJob();
         console.log('Print result:', data);
         if (typeof refreshJobs === 'function') refreshJobs();
     } catch (error) {
@@ -1092,6 +1209,9 @@ async function handleQRCodePrint(event) {
             requestBody.confirm_large_batch = true;
         }
 
+        const keepHeld = window.saveHeldOnly === true;
+        window.saveHeldOnly = false;
+        withAmend(requestBody, keepHeld);
         const response = await fetch('/api/v1/qrcode/print', {
             method: 'POST',
             headers: {
@@ -1110,7 +1230,8 @@ async function handleQRCodePrint(event) {
 
         const data = await response.json();
 
-        showNotification('Added to print queue', 'success');
+        showNotification(data.held ? 'Held label updated' : 'Added to print queue', 'success');
+        if (!keepHeld) clearOpenedJob();
         console.log('Print result:', data);
         if (typeof refreshJobs === 'function') refreshJobs();
     } catch (error) {
@@ -1214,6 +1335,9 @@ async function handleLabelPrint(event) {
             requestBody.confirm_large_batch = true;
         }
 
+        const keepHeld = window.saveHeldOnly === true;
+        window.saveHeldOnly = false;
+        withAmend(requestBody, keepHeld);
         const response = await fetch('/api/v1/label/text-qrcode', {
             method: 'POST',
             headers: {
@@ -1232,7 +1356,8 @@ async function handleLabelPrint(event) {
         
         const data = await response.json();
         
-        showNotification('Added to print queue', 'success');
+        showNotification(data.held ? 'Held label updated' : 'Added to print queue', 'success');
+        if (!keepHeld) clearOpenedJob();
         console.log('Print result:', data);
         if (typeof refreshJobs === 'function') refreshJobs();
     } catch (error) {
@@ -1323,6 +1448,9 @@ async function handleTextImagePrint(event) {
             formData.append('confirm_large_batch', 'true');
         }
 
+        const keepHeld = window.saveHeldOnly === true;
+        window.saveHeldOnly = false;
+        appendAmend(formData, keepHeld);
         const response = await fetch('/api/v1/label/text-image', {
             method: 'POST',
             body: formData
@@ -1338,7 +1466,8 @@ async function handleTextImagePrint(event) {
 
         const data = await response.json();
 
-        showNotification('Added to print queue', 'success');
+        showNotification(data.held ? 'Held label updated' : 'Added to print queue', 'success');
+        if (!keepHeld) clearOpenedJob();
         console.log('Print result:', data);
         if (typeof refreshJobs === 'function') refreshJobs();
     } catch (error) {
@@ -2880,6 +3009,12 @@ async function openJob(jobId) {
     const params = job.params;
     const type = params.type;
     const settings = params.settings || {};
+
+    // Only a HELD job can be edited in place. Reopening a finished one is a
+    // "start from this" convenience, and amending it would rewrite the record
+    // of something that already printed.
+    openedHeldJobId = job.status === 'held' ? job.id : null;
+    if (typeof refreshComposerMode === 'function') refreshComposerMode();
 
     try {
         if (type === 'text') {
