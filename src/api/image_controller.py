@@ -24,6 +24,7 @@ from src.utils.print_guard import (
     enforce_large_batch_confirmation,
     enforce_media_match,
     is_confirmed,
+    guard_and_dispatch,
 )
 from src.utils.dry_run import is_dry_run, build_dry_run_response
 
@@ -64,16 +65,6 @@ def print_image() -> Dict[str, Any]:
             if setting not in settings:
                 raise ValidationError(f"{setting} is required", f"settings.{setting}")
 
-        # Reject a label size the loaded media cannot print, before the job
-        # is queued -- printing is asynchronous, so an error raised during
-        # the print never reaches the caller.
-        enforce_media_match(settings)
-
-        # Large batches require explicit confirmation before enqueuing.
-        enforce_large_batch_confirmation(
-            settings.get("copies", 1), is_confirmed(request.form.get("confirm_large_batch"))
-        )
-
         # Dry run: validate settings + reachability, but do not save/print.
         if is_dry_run(request.form.get("dry_run")):
             return build_dry_run_response(settings, None)
@@ -105,12 +96,14 @@ def print_image() -> Dict[str, Any]:
         original_name = image_file.filename or "Image"
         label = secure_filename(image_file.filename or "") or "Image"
         params = {"type": "image", "filename": original_name, "settings": settings}
-        job_id = print_queue.submit(
-            "image", label, job, params=params, file_path=stored_path
+        # An image job holds its file, so a held one can ALSO be reopened in
+        # the composer -- which is what /image/compose has always done.
+        return guard_and_dispatch(
+            "image", label, job, settings,
+            hold=request.form.get("hold"),
+            confirm_large_batch=request.form.get("confirm_large_batch"),
+            params=params, file_path=stored_path,
         )
-        logger.info("Image print job queued", job_id=job_id, path=stored_path)
-
-        return {"success": True, "job_id": job_id, "message": "Print job queued"}
     except ConfirmationRequiredError:
         raise
     except ValidationError as e:
