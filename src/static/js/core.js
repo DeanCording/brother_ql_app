@@ -40,6 +40,11 @@ function initApp() {
     // definite request than the tab that happened to be open last time.
     handleSharedFile();
 
+    // Render the compose buttons once at startup. "Hold for later" is offered
+    // on every form, not only after a held job has been opened, so it has to
+    // exist before anything is opened.
+    if (typeof refreshComposerMode === 'function') refreshComposerMode();
+
     console.log('Brother QL Printer App initialized');
 }
 

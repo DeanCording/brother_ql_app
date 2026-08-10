@@ -389,3 +389,55 @@ def test_rotation_and_resize_save_with_an_explicit_format():
     rez = rez[:rez.index("\n    def ")]
     assert "format=resize_fmt" in rez
     assert rez.index("resize_fmt = img.format") < rez.index("img.save(")
+
+
+def test_printer_status_has_exactly_one_poller():
+    """Two pollers race for a device that answers one query at a time.
+
+    The QL serves a single USB status request at a time. When the navbar pill
+    and the loaded-media bar each ran their own 30s timer they eventually
+    overlapped, and the loser reported the printer as unreadable -- producing
+    "Online" in the navbar and "Printer not reporting media" directly below it,
+    for the same printer, seconds apart.
+
+    checkPrinterStatus is the only poller now, and it feeds both readouts from
+    the one response.
+    """
+    import pathlib
+    core = pathlib.Path("src/static/js/core.js").read_text()
+    assert core.count("setInterval(checkPrinterStatus") == 1
+    assert "setInterval(refreshLoadedMedia" not in core
+
+    api = pathlib.Path("src/static/js/api.js").read_text()
+    # ...and the navbar hands its response to the media bar rather than
+    # letting it fetch again.
+    assert "applyLoadedMedia(data)" in api
+    # Only the shared reader may POST to the status endpoint.
+    assert api.count("'/api/v1/printers/status'") == 1
+
+
+def test_hold_button_is_offered_on_every_compose_form():
+    """Holding is a choice about the label, not a property of editing.
+
+    It first appeared only after opening a held job, which made "park this for
+    later" unreachable from a fresh compose -- the roll may be wrong, or a
+    batch is being prepared, and neither involves an existing job.
+    """
+    import pathlib
+    api = pathlib.Path("src/static/js/api.js").read_text()
+
+    fn = api[api.index("function refreshComposerMode"):]
+    fn = fn[:fn.index("\n}\n") + 3]
+
+    # The button is created unconditionally...
+    create = fn.index("saveBtn = document.createElement")
+    early_return = fn.index("if (!editing)")
+    assert create < early_return, "the hold button must exist before the non-editing return"
+
+    # ...and only its wording depends on editing.
+    assert "Save changes" in fn and "Hold for later" in fn
+
+    # It must also be rendered at startup, not just when a job is opened.
+    core = pathlib.Path("src/static/js/core.js").read_text()
+    assert "refreshComposerMode()" in core
+
