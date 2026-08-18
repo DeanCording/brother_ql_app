@@ -17,7 +17,12 @@ document.addEventListener('DOMContentLoaded', () => {
 function initApp() {
     // Load settings
     loadSettings();
-    
+
+    // Fill the typeface pickers. Deliberately not sequenced against
+    // loadSettings: either order works, because the pickers remember the
+    // family the settings asked for and replay it once the options exist.
+    loadFontCatalog();
+
     // Set up event listeners
     setupEventListeners();
     
@@ -327,7 +332,19 @@ function setupEventListeners() {
                 // Also push a debounced server-rendered (true-to-print) preview.
                 el.addEventListener('input', () => requestServerPreview('text'));
             });
-        }
+
+
+            // Typeface changes both previews: the draft restyles immediately,
+            // and the true-to-print render has to be re-asked for. Guarded
+            // individually so a cached older index.html without these controls
+            // still previews.
+            ['text-font-family', 'text-font-style'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.addEventListener('change', updateTextPreview);
+                el.addEventListener('change', () => requestServerPreview('text'));
+            });
+       }
 
         // Orientation and vertical alignment only change the rendered label,
         // not the client-side mock preview, so they just refresh the
@@ -408,9 +425,16 @@ function setupEventListeners() {
             qrTextAlignment.addEventListener('change', updateQRCodePreview);
         }
 
+        ['qr-text-font-family', 'qr-text-font-style'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', updateQRCodePreview);
+        });
+
         // Any QR field change also refreshes the server-rendered preview.
         [qrData, qrSize, qrErrorCorrection, qrShowText, qrTextContent,
-         qrTextPosition, qrTextFontSize, qrTextAlignment].forEach(el => {
+         qrTextPosition, qrTextFontSize, qrTextAlignment,
+         document.getElementById('qr-text-font-family'),
+         document.getElementById('qr-text-font-style')].forEach(el => {
             if (!el) return;
             const evt = (el.tagName === 'SELECT' || el.type === 'checkbox') ? 'change' : 'input';
             el.addEventListener(evt, () => requestServerPreview('qrcode'));
@@ -454,9 +478,16 @@ function setupEventListeners() {
             labelTextAlignment.addEventListener('change', updateLabelPreview);
         }
 
+        ['label-text-font-family', 'label-text-font-style'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', updateLabelPreview);
+        });
+
         // Any label field change also refreshes the server-rendered preview.
         [labelQrData, labelQrPosition, labelQrErrorCorrection, labelTextContent,
-         labelTextFontSize, labelTextAlignment].forEach(el => {
+         labelTextFontSize, labelTextAlignment,
+         document.getElementById('label-text-font-family'),
+         document.getElementById('label-text-font-style')].forEach(el => {
             if (!el) return;
             const evt = el.tagName === 'SELECT' ? 'change' : 'input';
             el.addEventListener(evt, () => requestServerPreview('label'));

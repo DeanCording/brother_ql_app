@@ -13,6 +13,7 @@ from brother_ql.backends import guess_backend
 
 from src.utils.uri_validation import validate_printer_uri, validate_webhook_url
 
+
 # Imported unguarded, and deliberately so. This used to sit in a try/except
 # ImportError with a second, hand-written copy of DEFAULT_SETTINGS in the except
 # branch -- a copy that had silently fallen three releases behind (no
@@ -136,9 +137,9 @@ class SettingsService:
 
         type_checks = {
             "printer_uri": str, "printer_model": str, "label_size": str,
-            "font_size": (int, float), "alignment": str, "orientation": str,
-            "vertical_alignment": str,
-            "rotate": (int, float),
+            "font_size": (int, float), "font_family": str, "font_style": str,
+            "alignment": str, "vertical_alignment": str,
+            "rotate_mode": str, "rotate": (int, float),
             "threshold": (int, float), "dither": bool, "compress": bool, "red": bool,
             "keep_alive_enabled": bool, "keep_alive_interval": (int, float),
             "keep_alive_mode": str, "keep_alive_duration_seconds": int,
@@ -185,6 +186,28 @@ class SettingsService:
 
         if "vertical_alignment" in settings_to_validate and settings_to_validate["vertical_alignment"] not in ["top", "middle", "bottom"]:
             raise ValueError(f"Invalid vertical_alignment value: {settings_to_validate['vertical_alignment']}. Must be top, middle, or bottom.")
+
+        # font_style is a closed set, so a typo is worth rejecting outright.
+        #
+        # font_family deliberately is NOT validated against the installed font
+        # catalog. A settings file may legitimately name a face that is missing
+        # right now -- a drop-in font not yet copied onto the volume, or a
+        # config restored onto a fresh container -- and refusing the entire save
+        # for that would lock the user out of changing unrelated settings. The
+        # renderer falls back to the default face instead, which degrades one
+        # label rather than the whole config.
+        if ("font_style" in settings_to_validate
+                and settings_to_validate["font_style"] not in
+                ["regular", "bold", "italic", "bold_italic"]):
+            raise ValueError(
+                f"Invalid font_style value: {settings_to_validate['font_style']}. "
+                "Must be regular, bold, italic or bold_italic.")
+
+        if ("rotate_mode" in settings_to_validate
+                and settings_to_validate["rotate_mode"] not in ["image", "layout"]):
+            raise ValueError(
+                f"Invalid rotate_mode value: {settings_to_validate['rotate_mode']}. "
+                "Must be image or layout.")
 
         if "orientation" in settings_to_validate and settings_to_validate["orientation"] not in ["across", "lengthwise"]:
             raise ValueError(f"Invalid orientation value: {settings_to_validate['orientation']}. Must be across or lengthwise.")
@@ -817,8 +840,8 @@ class SettingsService:
     # would hand the render path four settings it has no use for -- and would
     # invite a print request to start re-deciding the medium mid-job.
     _INHERITABLE_PRINT_KEYS = (
-        "printer_uri", "printer_model", "label_size", "font_size", "alignment",
-        "orientation", "vertical_alignment", "rotate", "threshold", "dither",
+        "printer_uri", "printer_model", "label_size", "font_size", "font_family", "font_style", 
+        "alignment", "orientation", "vertical_alignment", "rotate", "threshold", "dither",
         "compress", "red",
         "copies", "cut_mode", "dpi_600", "hq", "text_markup",
         # The print path reads the calibration offsets straight off the resolved

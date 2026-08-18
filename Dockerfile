@@ -31,15 +31,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # gets in -- and it is 437 MB of it, measured.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu \
+    fonts-liberation \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+# fonts-liberation is metric-compatible with Arial/Times New Roman/Courier New,
+# so it covers sans, serif and mono for ~6MB. DejaVu stays because DejaVu Sans
+# Bold is the default face and the fallback the font catalog resolves to.
+# Additional faces do not need a rebuild: drop them into /app/data/fonts.
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
-RUN mkdir -p /app/uploads /app/data
+# Create necessary directories (including /app/data for volume mount point).
+# /app/data/fonts is the drop-in directory: a .ttf copied in there is picked up
+# on the next request, no restart and no rebuild. It is created here so it
+# exists even when /app/data is an empty named volume.
+RUN mkdir -p /app/uploads /app/data /app/data/fonts /app/src/config
 
 # Copy application code. Only the files the container actually runs -- tests,
 # docs, screenshots and CI config have no business in the published image.

@@ -258,6 +258,12 @@ DEFAULT_SETTINGS = {
     "printer_model": "QL-800",
     "label_size": "62",
     "font_size": 50,
+    # Typeface for rendered text. An empty family means "whatever the font
+    # catalog defaults to", which is DejaVu Sans -- the face this app hardcoded
+    # before fonts were selectable, so an existing install renders unchanged.
+    # Style is bold for the same reason: the hardcoded face was DejaVuSans-Bold.
+    "font_family": "",
+    "font_style": "bold",  # regular | bold | italic | bold_italic
     "alignment": "left",
     "orientation": "across",  # across | lengthwise (continuous rolls only)
     "vertical_alignment": "middle",  # top | middle | bottom (no effect on continuous + across)

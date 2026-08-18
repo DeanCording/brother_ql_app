@@ -9,6 +9,10 @@ services:
       #   - "127.0.0.1:5000:5000"
       - "5000:5000"
     volumes:
+      # Settings live here, and so does the font drop-in directory: copy a .ttf
+      # or .otf into ./data/fonts and it appears in the font picker within a few
+      # seconds -- no restart, no image rebuild. The directory is created on
+      # startup if it does not exist.
       - ./data:/app/data
     restart: unless-stopped
     environment:

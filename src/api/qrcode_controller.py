@@ -16,6 +16,7 @@ from src.utils.print_guard import (
     is_confirmed,
     guard_and_dispatch,
 )
+from src.services.font_service import apply_text_font
 from src.utils.dry_run import is_dry_run, build_dry_run_response
 from src.utils.formatting import short_label
 
@@ -74,6 +75,7 @@ def print_qr_code(body: Dict[str, Any]) -> Dict[str, Any]:
             combined_settings["text_font_size"] = text_settings.get("font_size", 30)
             combined_settings["text_alignment"] = text_settings.get("alignment", "center")
             combined_settings["text_wrap"] = text_settings.get("wrap", True)
+            apply_text_font(combined_settings, text_settings)
         
         # Dry run: render + reachability check, but do not print or enqueue.
         if is_dry_run(body.get("dry_run")):

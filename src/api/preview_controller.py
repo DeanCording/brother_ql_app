@@ -26,6 +26,7 @@ from src.services.printer_service import printer_service
 from src.services.settings_service import settings_service
 from src.utils.exceptions import AppError, ValidationError, PrinterError, internal_error
 from src.utils.print_settings_schema import parse_and_validate_settings
+from src.services.font_service import apply_text_font
 
 logger = structlog.get_logger()
 
@@ -165,6 +166,7 @@ def preview_qrcode(body: Dict[str, Any]) -> Dict[str, Any]:
             combined_settings["text_font_size"] = text_settings.get("font_size", 30)
             combined_settings["text_alignment"] = text_settings.get("alignment", "center")
             combined_settings["text_wrap"] = text_settings.get("wrap", True)
+            apply_text_font(combined_settings, text_settings)
 
         image = printer_service.render_qrcode_preview(combined_settings)
         return _preview_response(image)
@@ -230,6 +232,7 @@ def preview_label(body: Dict[str, Any]) -> Dict[str, Any]:
         combined_settings["text_alignment"] = text_alignment
         combined_settings["text_font_size"] = text_font_size
         combined_settings["text_wrap"] = text_settings.get("wrap", True)
+        apply_text_font(combined_settings, text_settings)
 
         if qr_settings:
             combined_settings["qr_version"] = qr_settings.get("version", 1)

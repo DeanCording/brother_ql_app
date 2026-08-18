@@ -197,6 +197,17 @@ async function loadSettings() {
         document.getElementById('printer-model').value = settings.printer_model || '';
         document.getElementById('label-size').value = settings.label_size || '62';
         document.getElementById('text-font-size').value = settings.font_size || '50';
+        // The Text form's typeface pair doubles as the saved default, the same
+        // arrangement font_size and alignment already use.
+        setFontFamilyValue('text-font-family', settings.font_family || '');
+        const defaultFontStyle = settings.font_style || 'bold';
+        setFieldValue('text-font-style', defaultFontStyle);
+        // Seed the other compose forms with the same default, so a label made
+        // elsewhere matches the one made here unless deliberately changed.
+        ['qr-text', 'label-text', 'textimage'].forEach(prefix => {
+            setFontFamilyValue(`${prefix}-font-family`, settings.font_family || '');
+            setFieldValue(`${prefix}-font-style`, defaultFontStyle);
+        });
         document.getElementById('text-alignment').value = settings.alignment || 'left';
         document.getElementById('text-vertical-alignment').value = settings.vertical_alignment || 'middle';
         document.getElementById('text-orientation').value = settings.orientation || 'across';
@@ -640,6 +651,7 @@ async function handleTextPrint(event) {
     try {
         const text = document.getElementById('text-input').value;
         const fontSize = document.getElementById('text-font-size').value;
+        const textFont = readFontChoice('text-font-family', 'text-font-style');
         const alignment = document.getElementById('text-alignment').value;
         const verticalAlignment = document.getElementById('text-vertical-alignment').value;
         const orientation = document.getElementById('text-orientation').value;
@@ -692,6 +704,8 @@ async function handleTextPrint(event) {
                 printer_model: printerModel,
                 label_size: labelSize,
                 font_size: parseInt(fontSize),
+                font_family: textFont.family,
+                font_style: textFont.style,
                 alignment: alignment,
                 vertical_alignment: verticalAlignment,
                 orientation: orientation,
@@ -1136,6 +1150,7 @@ async function handleQRCodePrint(event) {
         const qrTextContent = document.getElementById('qr-text-content').value;
         const qrTextPosition = document.getElementById('qr-text-position').value;
         const qrTextFontSize = document.getElementById('qr-text-font-size').value;
+        const qrTextFont = readFontChoice('qr-text-font-family', 'qr-text-font-style');
         const qrTextAlignment = document.getElementById('qr-text-alignment').value;
         
         // Get printer settings
@@ -1214,6 +1229,8 @@ async function handleQRCodePrint(event) {
                 content: qrTextContent,
                 position: qrTextPosition,
                 font_size: parseInt(qrTextFontSize),
+                font_family: qrTextFont.family,
+                font_style: qrTextFont.style,
                 alignment: qrTextAlignment
             };
         }
@@ -1265,6 +1282,7 @@ async function handleLabelPrint(event) {
         const labelQrErrorCorrection = document.getElementById('label-qr-error-correction').value;
         const labelTextContent = document.getElementById('label-text-content').value;
         const labelTextFontSize = document.getElementById('label-text-font-size').value;
+        const labelTextFont = readFontChoice('label-text-font-family', 'label-text-font-style');
         const labelTextAlignment = document.getElementById('label-text-alignment').value;
         
         // Get printer settings
@@ -1326,6 +1344,8 @@ async function handleLabelPrint(event) {
             text: {
                 content: labelTextContent,
                 font_size: parseInt(labelTextFontSize),
+                font_family: labelTextFont.family,
+                font_style: labelTextFont.style,
                 alignment: labelTextAlignment
             },
             settings: {
@@ -1389,6 +1409,7 @@ async function handleTextImagePrint(event) {
         const imageInput = document.getElementById('textimage-input');
         const text = document.getElementById('textimage-text').value;
         const fontSize = document.getElementById('textimage-font-size').value;
+        const textImageFont = readFontChoice('textimage-font-family', 'textimage-font-style');
         const alignment = document.getElementById('textimage-alignment').value;
         const position = document.getElementById('textimage-position').value;
 
@@ -1441,6 +1462,8 @@ async function handleTextImagePrint(event) {
         formData.append('image', imageInput.files[0]);
         formData.append('text', text);
         formData.append('font_size', fontSize);
+        formData.append('font_family', textImageFont.family);
+        formData.append('font_style', textImageFont.style);
         formData.append('alignment', alignment);
         formData.append('position', position);
         formData.append('settings', JSON.stringify({
@@ -1500,6 +1523,7 @@ async function handleSaveSettings(event) {
         const printerModel = document.getElementById('printer-model').value;
         const labelSize = document.getElementById('label-size').value;
         const fontSize = document.getElementById('text-font-size').value;
+        const defaultFont = readFontChoice('text-font-family', 'text-font-style');
         const alignment = document.getElementById('text-alignment').value;
         const verticalAlignment = document.getElementById('text-vertical-alignment').value;
         const orientation = document.getElementById('text-orientation').value;
@@ -1566,6 +1590,8 @@ async function handleSaveSettings(event) {
             printer_model: printerModel,
             label_size: labelSize,
             font_size: parseInt(fontSize),
+            font_family: defaultFont.family,
+            font_style: defaultFont.style,
             alignment: alignment,
             vertical_alignment: verticalAlignment,
             orientation: orientation,
@@ -1851,12 +1877,15 @@ function buildPreviewRequest(mode) {
     if (mode === 'text') {
         const text = document.getElementById('text-input').value;
         if (!text.trim()) return null;
+        const textFont = readFontChoice('text-font-family', 'text-font-style');
         return {
             url: '/api/v1/text/preview',
             json: {
                 text: text,
                 settings: Object.assign({}, settings, {
                     font_size: parseInt(document.getElementById('text-font-size').value),
+                    font_family: textFont.family,
+                    font_style: textFont.style,
                     alignment: document.getElementById('text-alignment').value,
                     vertical_alignment: document.getElementById('text-vertical-alignment').value,
                     orientation: document.getElementById('text-orientation').value
@@ -1884,10 +1913,13 @@ function buildPreviewRequest(mode) {
         // Sent whenever the box is ticked, empty caption included, so the
         // preview shows the same fallback the print will use.
         if (showText) {
+            const qrTextFont = readFontChoice('qr-text-font-family', 'qr-text-font-style');
             body.text = {
                 content: textContent,
                 position: document.getElementById('qr-text-position').value,
                 font_size: parseInt(document.getElementById('qr-text-font-size').value),
+                font_family: qrTextFont.family,
+                font_style: qrTextFont.style,
                 alignment: document.getElementById('qr-text-alignment').value
             };
         }
@@ -1898,6 +1930,7 @@ function buildPreviewRequest(mode) {
         const qrData = document.getElementById('label-qr-data').value;
         const textContent = document.getElementById('label-text-content').value;
         if (!qrData.trim() || !textContent.trim()) return null;
+        const labelTextFont = readFontChoice('label-text-font-family', 'label-text-font-style');
         return {
             url: '/api/v1/label/preview',
             json: {
@@ -1913,6 +1946,8 @@ function buildPreviewRequest(mode) {
                 text: {
                     content: textContent,
                     font_size: parseInt(document.getElementById('label-text-font-size').value),
+                    font_family: labelTextFont.family,
+                    font_style: labelTextFont.style,
                     alignment: document.getElementById('label-text-alignment').value
                 },
                 settings: settings
@@ -3033,6 +3068,8 @@ async function openJob(jobId) {
             applySettingsToForm(settings);
             setFieldValue('text-input', params.text);
             setFieldValue('text-font-size', settings.font_size != null ? String(settings.font_size) : null);
+            setFontFamilyValue('text-font-family', settings.font_family || '');
+            setFieldValue('text-font-style', settings.font_style);
             setFieldValue('text-alignment', settings.alignment);
             setFieldValue('text-vertical-alignment', settings.vertical_alignment);
             setFieldValue('text-orientation', settings.orientation);
@@ -3051,6 +3088,10 @@ async function openJob(jobId) {
             setFieldValue('label-text-content', params.text);
             setFieldValue('label-qr-data', params.data);
             setFieldValue('label-text-font-size', settings.font_size != null ? String(settings.font_size) : null);
+            // Composite layouts namespace their text options, so the stored key
+            // is text_font_* rather than font_*.
+            setFontFamilyValue('label-text-font-family', settings.text_font_family || '');
+            setFieldValue('label-text-font-style', settings.text_font_style);
             setFieldValue('label-text-alignment', settings.alignment);
             setFieldValue('label-qr-position', settings.qr_position);
             setFieldValue('label-qr-error-correction', settings.error_correction);
