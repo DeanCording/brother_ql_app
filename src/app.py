@@ -443,4 +443,4 @@ if __name__ == '__main__':
     # Bind on 0.0.0.0 because we run inside a container and must be reachable
     # from outside it. Access control is NOT provided by the bind address but by
     # the opt-in API-key auth (API_KEY) and/or an upstream reverse proxy.
-    app.run(host='0.0.0.0', port=5000, debug=debug_mode, use_reloader=use_reloader)
+    app.run(host='0.0.0.0', port=5000, reload=False, log_level='info')

@@ -31,8 +31,8 @@ PY_VERSION=$($PYTHON_CMD -c "import sys; print(f'{sys.version_info.major}.{sys.v
 PY_MAJOR=$(echo $PY_VERSION | cut -d. -f1)
 PY_MINOR=$(echo $PY_VERSION | cut -d. -f2)
 
-if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 8 ]); then
-    echo "Error: Python 3.8+ is required. Found Python $PY_VERSION"
+if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 11 ]); then
+    echo "Error: Python 3.11+ is required. Found Python $PY_VERSION"
     exit 1
 fi
 
@@ -73,9 +73,19 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+if [ ! -d "$PWD/data" ]; then
+    mkdir $PWD/data
+fi
+
 # Run the application
 echo "Starting Brother QL Printer App..."
-python src/app.py
+export BROTHER_QL_DATA_DIR="$PWD/data"
+export PYTHONPATH="$PWD:$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+
+echo $BROTHER_QL_DATA_DIR
+echo $PYTHONPATH
+
+python -m src.app
 
 # Deactivate virtual environment on exit
 if command -v deactivate &> /dev/null; then

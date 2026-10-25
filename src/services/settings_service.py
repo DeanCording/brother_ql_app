@@ -49,7 +49,10 @@ class SettingsService:
             settings_file: Path to the settings file. Defaults to /app/data/settings.json.
         """
         if settings_file is None:
-            data_dir = "/app/data"
+            data_dir = os.environ.get(
+                "BROTHER_QL_DATA_DIR",
+                "/app/data"
+            )
             self.settings_file = os.path.join(data_dir, "settings.json")
         else:
             self.settings_file = settings_file
