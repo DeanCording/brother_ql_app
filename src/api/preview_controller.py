@@ -350,7 +350,6 @@ def preview_text_image():
 
         if not text.strip():
             raise ValidationError("Text is required", "text")
-        logger.info("Form settings", settings=request.form.get("settings"))
         settings = settings_service.resolve_print_settings(
             parse_and_validate_settings(
                 request.form.get("settings")
