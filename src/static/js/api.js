@@ -88,6 +88,10 @@ async function loadSettings() {
         document.getElementById('text-alignment').value = settings.alignment || 'left';
         document.getElementById('text-vertical-alignment').value = settings.vertical_alignment || 'middle';
         document.getElementById('text-orientation').value = settings.orientation || 'across';
+        ['image', 'qrcode', 'label', 'textimage', 'pdf'].forEach(form => {
+            const el = document.getElementById(form + '-orientation');
+            if (el) el.value = settings.orientation || 'across';
+        });
         // Reflect the loaded label type in the label picker, in the orientation
         // control's state and in the preview panel (round media is previewed as
         // a circle). The assignment above does not fire "change", so the
@@ -201,13 +205,16 @@ function updateKeepAliveModeUI() {
  * on die-cut media the backend falls back to "across", so the control is
  * disabled (and visually muted) there.
  */
-function updateTextOrientationUI() {
-    const labelSizeEl = document.getElementById('label-size');
-    const orientationEl = document.getElementById('text-orientation');
-    if (!labelSizeEl || !orientationEl) return;
 
-    orientationEl.disabled = DIE_CUT_LABEL_PATTERN.test(labelSizeEl.value);
+function updateTextOrientationUI() {
+    const orientationEl = document.getElementById('text-orientation');
+    if (!orientationEl) return;
+
+    // Lengthwise orientation is now supported for both
+    // continuous and die-cut labels.
+    orientationEl.disabled = false;
 }
+
 
 /**
  * Load keep alive status from the API
@@ -529,7 +536,22 @@ async function handleTextPrint(event) {
         const printerUri = document.getElementById('printer-uri').value;
         const printerModel = document.getElementById('printer-model').value;
         const labelSize = document.getElementById('label-size').value;
-        const rotate = document.getElementById('rotate').value;
+        const selectedRotation = parseInt(
+            document.getElementById('rotate').value,
+                                          10
+        );
+
+        // Rectangular die-cut labels cannot have their entire
+        // raster canvas rotated by 90 or 270 degrees.
+        const isRectangularDieCut =
+        /^\d+x\d+$/.test(labelSize) &&
+        labelSize.split('x')[0] !== labelSize.split('x')[1];
+
+        const rotate = (
+            isRectangularDieCut &&
+            [90, 270].includes(selectedRotation)
+        ) ? 0 : selectedRotation;
+
         const threshold = document.getElementById('threshold').value;
         const dither = document.getElementById('dither').value === 'true';
         const red = document.getElementById('red').value === 'true';
@@ -621,7 +643,22 @@ async function handleImagePrint(event) {
         const printerUri = document.getElementById('printer-uri').value;
         const printerModel = document.getElementById('printer-model').value;
         const labelSize = document.getElementById('label-size').value;
-        const rotate = document.getElementById('rotate').value;
+        const selectedRotation = parseInt(
+            document.getElementById('rotate').value,
+                                          10
+        );
+
+        // Rectangular die-cut labels cannot have their entire
+        // raster canvas rotated by 90 or 270 degrees.
+        const isRectangularDieCut =
+        /^\d+x\d+$/.test(labelSize) &&
+        labelSize.split('x')[0] !== labelSize.split('x')[1];
+
+        const rotate = (
+            isRectangularDieCut &&
+            [90, 270].includes(selectedRotation)
+        ) ? 0 : selectedRotation;
+
         const threshold = document.getElementById('threshold').value;
         
         // Determine dithering based on image mode
@@ -653,6 +690,7 @@ async function handleImagePrint(event) {
             printer_uri: printerUri,
             printer_model: printerModel,
             label_size: labelSize,
+            orientation: document.getElementById('image-orientation').value,
             rotate: parseInt(rotate),
             threshold: parseFloat(threshold),
             dither: dither,
@@ -708,7 +746,22 @@ async function handlePdfPrint(event) {
         const printerUri = document.getElementById('printer-uri').value;
         const printerModel = document.getElementById('printer-model').value;
         const labelSize = document.getElementById('label-size').value;
-        const rotate = document.getElementById('rotate').value;
+        const selectedRotation = parseInt(
+            document.getElementById('rotate').value,
+                                          10
+        );
+
+        // Rectangular die-cut labels cannot have their entire
+        // raster canvas rotated by 90 or 270 degrees.
+        const isRectangularDieCut =
+        /^\d+x\d+$/.test(labelSize) &&
+        labelSize.split('x')[0] !== labelSize.split('x')[1];
+
+        const rotate = (
+            isRectangularDieCut &&
+            [90, 270].includes(selectedRotation)
+        ) ? 0 : selectedRotation;
+
         const threshold = document.getElementById('threshold').value;
         const dither = document.getElementById('dither').value === 'true';
         const red = document.getElementById('red').value === 'true';
@@ -735,6 +788,7 @@ async function handlePdfPrint(event) {
             printer_uri: printerUri,
             printer_model: printerModel,
             label_size: labelSize,
+            orientation: document.getElementById('pdf-orientation').value,
             rotate: parseInt(rotate),
             threshold: parseFloat(threshold),
             dither: dither,
@@ -959,7 +1013,22 @@ async function handleQRCodePrint(event) {
         const printerUri = document.getElementById('printer-uri').value;
         const printerModel = document.getElementById('printer-model').value;
         const labelSize = document.getElementById('label-size').value;
-        const rotate = document.getElementById('rotate').value;
+        const selectedRotation = parseInt(
+            document.getElementById('rotate').value,
+                                          10
+        );
+
+        // Rectangular die-cut labels cannot have their entire
+        // raster canvas rotated by 90 or 270 degrees.
+        const isRectangularDieCut =
+        /^\d+x\d+$/.test(labelSize) &&
+        labelSize.split('x')[0] !== labelSize.split('x')[1];
+
+        const rotate = (
+            isRectangularDieCut &&
+            [90, 270].includes(selectedRotation)
+        ) ? 0 : selectedRotation;
+
         const threshold = document.getElementById('threshold').value;
         const dither = document.getElementById('dither').value === 'true';
         const red = document.getElementById('red').value === 'true';
@@ -995,6 +1064,7 @@ async function handleQRCodePrint(event) {
                 printer_uri: printerUri,
                 printer_model: printerModel,
                 label_size: labelSize,
+            orientation: document.getElementById('qrcode-orientation').value,
                 rotate: parseInt(rotate),
                 threshold: parseFloat(threshold),
                 dither: dither,
@@ -1068,7 +1138,22 @@ async function handleLabelPrint(event) {
         const printerUri = document.getElementById('printer-uri').value;
         const printerModel = document.getElementById('printer-model').value;
         const labelSize = document.getElementById('label-size').value;
-        const rotate = document.getElementById('rotate').value;
+        const selectedRotation = parseInt(
+            document.getElementById('rotate').value,
+                                          10
+        );
+
+        // Rectangular die-cut labels cannot have their entire
+        // raster canvas rotated by 90 or 270 degrees.
+        const isRectangularDieCut =
+        /^\d+x\d+$/.test(labelSize) &&
+        labelSize.split('x')[0] !== labelSize.split('x')[1];
+
+        const rotate = (
+            isRectangularDieCut &&
+            [90, 270].includes(selectedRotation)
+        ) ? 0 : selectedRotation;
+
         const threshold = document.getElementById('threshold').value;
         const dither = document.getElementById('dither').value === 'true';
         const red = document.getElementById('red').value === 'true';
@@ -1114,6 +1199,7 @@ async function handleLabelPrint(event) {
                 printer_uri: printerUri,
                 printer_model: printerModel,
                 label_size: labelSize,
+            orientation: document.getElementById('label-orientation').value,
                 rotate: parseInt(rotate),
                 threshold: parseFloat(threshold),
                 dither: dither,
@@ -1181,7 +1267,22 @@ async function handleTextImagePrint(event) {
         const printerUri = document.getElementById('printer-uri').value;
         const printerModel = document.getElementById('printer-model').value;
         const labelSize = document.getElementById('label-size').value;
-        const rotate = document.getElementById('rotate').value;
+        const selectedRotation = parseInt(
+            document.getElementById('rotate').value,
+                                          10
+        );
+
+        // Rectangular die-cut labels cannot have their entire
+        // raster canvas rotated by 90 or 270 degrees.
+        const isRectangularDieCut =
+        /^\d+x\d+$/.test(labelSize) &&
+        labelSize.split('x')[0] !== labelSize.split('x')[1];
+
+        const rotate = (
+            isRectangularDieCut &&
+            [90, 270].includes(selectedRotation)
+        ) ? 0 : selectedRotation;
+
         const threshold = document.getElementById('threshold').value;
         const dither = document.getElementById('dither').value === 'true';
         const red = document.getElementById('red').value === 'true';
@@ -1209,6 +1310,7 @@ async function handleTextImagePrint(event) {
             printer_uri: printerUri,
             printer_model: printerModel,
             label_size: labelSize,
+            orientation: document.getElementById('textimage-orientation').value,
             rotate: parseInt(rotate),
             threshold: parseFloat(threshold),
             dither: dither,
@@ -1395,7 +1497,12 @@ let serverPreviewController = null;
  * do, so the server preview matches the real print output.
  */
 function collectPreviewSettings() {
+    const active = document.querySelector('#composeContent > .tab-pane.active');
+    const formId = active ? active.id.replace(/-panel$/, '') : 'text';
+    const orientationElement = document.getElementById(formId + '-orientation')
+        || document.getElementById('text-orientation');
     return {
+        orientation: orientationElement ? orientationElement.value : 'across',
         printer_uri: document.getElementById('printer-uri').value,
         printer_model: document.getElementById('printer-model').value,
         label_size: document.getElementById('label-size').value,
@@ -1457,6 +1564,47 @@ function showServerPreview(dataUrl) {
  */
 function buildPreviewRequest(mode) {
     const settings = collectPreviewSettings();
+
+    if (mode === 'textimage') {
+        const imageInput =
+        document.getElementById('textimage-input');
+
+        const text =
+        document.getElementById('textimage-text').value;
+
+        if (!imageInput.files.length || !text.trim()) {
+            return null;
+        }
+
+        const formData = new FormData();
+
+        formData.append('image', imageInput.files[0]);
+        formData.append('text', text);
+        formData.append(
+            'font_size',
+            document.getElementById('textimage-font-size').value
+        );
+        formData.append(
+            'alignment',
+            document.getElementById('textimage-alignment').value
+        );
+        formData.append(
+            'position',
+            document.getElementById('textimage-position').value
+        );
+
+        formData.append('settings', JSON.stringify({
+            ...settings,
+            orientation: document.getElementById(
+                'textimage-orientation'
+            ).value,
+        }));
+
+        return {
+            url: '/api/v1/label/text-image/preview',
+            form: formData
+        };
+    }
 
     if (mode === 'text') {
         const text = document.getElementById('text-input').value;
@@ -1544,10 +1692,35 @@ function buildPreviewRequest(mode) {
         }
         const formData = new FormData();
         formData.append('image', imageInput.files[0]);
-        formData.append('settings', JSON.stringify(Object.assign({}, settings, {
+        const orientation = document.getElementById(
+            'image-orientation'
+        ).value;
+
+        const labelSize = document.getElementById(
+            'label-size'
+        ).value;
+
+        const selectedRotation = parseInt(
+            document.getElementById('rotate').value, 10
+        ) || 0;
+
+        // Use the same rotation safeguard as image printing.
+        const isRectangularDieCut =
+        /^\d+x\d+$/.test(labelSize) &&
+        labelSize.split('x')[0] !== labelSize.split('x')[1];
+
+        const rotate = (
+            isRectangularDieCut &&
+            [90, 270].includes(selectedRotation)
+        ) ? 0 : selectedRotation;
+
+        formData.append('settings', JSON.stringify({
+            ...settings,
+            orientation: orientation,
+            rotate: rotate,
             dither: dither,
             image_mode: imageMode.value
-        })));
+        }));
         return { url: '/api/v1/image/preview', form: formData };
     }
 
@@ -2674,3 +2847,13 @@ async function clearFinishedJobs() {
         refreshJobs();
     }
 }
+
+// Orientation per compose style: refresh the server preview on changes.
+document.addEventListener('change', event => {
+    if (!/^(image|qrcode|label|textimage|pdf)-orientation$/.test(event.target.id)) return;
+    if (typeof getActiveComposeMode === 'function' &&
+        typeof requestServerPreview === 'function') {
+        const mode = getActiveComposeMode();
+        if (mode) requestServerPreview(mode);
+    }
+});

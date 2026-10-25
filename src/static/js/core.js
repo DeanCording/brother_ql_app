@@ -54,6 +54,7 @@ function previewModeForTarget(targetId) {
         case '#qrcode-panel': return 'qrcode';
         case '#label-panel': return 'label';
         case '#image-panel': return 'image';
+        case '#textimage-panel': return 'textimage';
         default: return null;
     }
 }
@@ -461,6 +462,28 @@ function setupEventListeners() {
         if (textImageInput) {
             textImageInput.addEventListener('change', handleTextImagePreview);
         }
+
+        [
+            'textimage-input',
+            'textimage-text',
+            'textimage-font-size',
+            'textimage-alignment',
+            'textimage-position',
+            'textimage-orientation'
+        ].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+
+            const eventName =
+            el.tagName === 'SELECT' ||
+            el.type === 'file'
+            ? 'change'
+            : 'input';
+
+            el.addEventListener(eventName, () => {
+                requestServerPreview('textimage');
+            });
+        });
     }
 
     // PDF print form

@@ -465,6 +465,53 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+
+  /label/text-image/preview:
+    post:
+      summary: Preview a Text + Image label
+      operationId: api.preview_controller.preview_text_image
+      tags:
+        - preview
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+                - text
+              properties:
+                image:
+                  type: string
+                  format: binary
+                text:
+                  type: string
+                font_size:
+                  type: integer
+                alignment:
+                  type: string
+                position:
+                  type: string
+                settings:
+                  type: string
+      responses:
+        '200':
+          description: Rendered Text + Image preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewResponse'
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+
   /pdf/print:
     post:
       summary: Print a PDF on labels

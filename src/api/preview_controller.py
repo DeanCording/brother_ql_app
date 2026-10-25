@@ -331,6 +331,78 @@ def preview_image() -> Dict[str, Any]:
         _cleanup_uploaded_file(image_path)
 
 
+def preview_text_image():
+    """Preview Text + Image using the actual print renderer."""
+    import os
+    import base64
+    from flask import request
+    from src.utils.print_settings_schema import parse_and_validate_settings
+
+    uploaded_path = None
+    rendered_path = None
+
+    try:
+        if "image" not in request.files:
+            raise ValidationError("Image is required", "image")
+
+        image_file = request.files["image"]
+        text = request.form.get("text", "")
+
+        if not text.strip():
+            raise ValidationError("Text is required", "text")
+        logger.info("Form settings", settings=request.form.get("settings"))
+        settings = settings_service.resolve_print_settings(
+            parse_and_validate_settings(
+                request.form.get("settings")
+            )
+        )
+
+        settings = settings.copy()
+        settings["text_font_size"] = int(
+            request.form.get("font_size", 30)
+        )
+        settings["text_alignment"] = request.form.get(
+            "alignment", "left"
+        )
+        settings["image_position"] = request.form.get(
+            "position", "right"
+        )
+
+        uploaded_path = _save_uploaded_file(image_file)
+
+        with Image.open(uploaded_path) as image:
+            image.verify()
+
+        # Use the same composition function as printing.
+        rendered_path = printer_service._create_text_image_label(
+            uploaded_path, text, settings
+        )
+
+        with Image.open(rendered_path) as image:
+            if settings["rotate"]:
+                image = image.rotate(
+                    -settings["rotate"],
+                    expand=True,
+                    fillcolor="white"
+                )
+
+            output = BytesIO()
+            image.save(output, format="PNG")
+
+        encoded = base64.b64encode(
+            output.getvalue()
+        ).decode("ascii")
+
+        return _preview_response(
+            "data:image/png;base64," + encoded
+        )
+
+    finally:
+        _cleanup_uploaded_file(uploaded_path)
+        if rendered_path and os.path.exists(rendered_path):
+            os.remove(rendered_path)
+
+
 def _save_uploaded_file(file: FileStorage) -> str:
     """
     Save an uploaded file to the upload folder under a UUID-based name.

@@ -3008,6 +3008,172 @@ class PrinterService:
             ImageProcessingError: If there's an error composing the label.
         """
         try:
+            # Lengthwise Text + Image for rectangular die-cut labels.
+            geometry = get_label_geometry(
+                settings.get("label_size"), settings
+            )
+            lengthwise_diecut = (
+                str(settings.get("orientation", "across")).lower()
+                == "lengthwise"
+                and geometry.is_die_cut
+                and not geometry.is_round
+                and bool(geometry.height)
+            )
+
+            if lengthwise_diecut:
+                # Construct artwork horizontally, then rotate the
+                # content to fit the printer's fixed label canvas.
+                canvas_width = geometry.height
+                canvas_height = geometry.width
+
+                padding = 6
+                gap = 12
+                image_width = min(
+                    int(canvas_width / 3),
+                    canvas_height - 2 * padding
+                )
+                image_height = canvas_height - 2 * padding
+
+                text_width = (
+                    canvas_width - image_width
+                    - 2 * padding - gap
+                )
+
+                # Load and scale image without distorting it.
+                with Image.open(image_path) as source:
+                    source.load()
+                    source = source.convert("RGBA")
+                    background = Image.new(
+                        "RGBA", source.size, "white"
+                    )
+                    background.alpha_composite(source)
+                    user_img = background.convert("RGB")
+
+                user_img.thumbnail(
+                    (image_width, image_height),
+                    Image.Resampling.LANCZOS
+                )
+
+                canvas = Image.new(
+                    "RGB",
+                    (canvas_width, canvas_height),
+                    "white"
+                )
+                draw = ImageDraw.Draw(canvas)
+
+                image_position = settings.get(
+                    "image_position", "right"
+                )
+
+                if image_position == "left":
+                    image_x = padding
+                    text_x = padding + image_width + gap
+                else:
+                    text_x = padding
+                    image_x = canvas_width - padding - image_width
+
+                image_y = (canvas_height - user_img.height) // 2
+                canvas.paste(
+                    user_img,
+                    (image_x + (image_width - user_img.width) // 2,
+                     image_y)
+                )
+
+                # Fit multiline text to the available area.
+                lines = text.split("\n")
+                requested_size = int(
+                    settings.get("text_font_size")
+                    or settings.get("font_size", 30)
+                )
+                alignment = settings.get(
+                    "text_alignment", "left"
+                )
+
+                spacing = 4
+                font = None
+                metrics = []
+                total_height = 0
+
+                for size in range(
+                    max(8, min(requested_size, 140)),
+                    7,
+                    -1
+                ):
+                    candidate = ImageFont.truetype(
+                        self.font_path, size
+                    )
+                    candidate_metrics = []
+
+                    for line in lines:
+                        bbox = draw.textbbox(
+                            (0, 0), line, font=candidate
+                        )
+                        candidate_metrics.append(bbox)
+
+                    widest = max(
+                        (b[2] - b[0] for b in candidate_metrics),
+                        default=0
+                    )
+                    line_height = sum(candidate.getmetrics())
+                    block_height = (
+                        len(lines) * line_height
+                        + max(0, len(lines) - 1) * spacing
+                    )
+
+                    if (
+                        widest <= text_width
+                        and block_height <= image_height
+                    ):
+                        font = candidate
+                        metrics = candidate_metrics
+                        total_height = block_height
+                        break
+
+                if font is None:
+                    raise ValueError(
+                        "Text does not fit lengthwise label"
+                    )
+
+                line_height = sum(font.getmetrics())
+                y = (canvas_height - total_height) // 2
+
+                for line, bbox in zip(lines, metrics):
+                    line_width = bbox[2] - bbox[0]
+
+                    if alignment == "right":
+                        x = text_x + text_width - line_width
+                    elif alignment == "center":
+                        x = text_x + (text_width - line_width) // 2
+                    else:
+                        x = text_x
+
+                    draw.text(
+                        (x - bbox[0], y - bbox[1]),
+                        line,
+                        font=font,
+                        fill="black"
+                    )
+                    y += line_height + spacing
+
+                # Rotate composition, NOT the final label canvas.
+                canvas = canvas.transpose(
+                    Image.Transpose.ROTATE_90
+                )
+
+                # Preserve the exact die-cut dimensions.
+                canvas = self._fit_to_label(
+                    canvas,
+                    settings.get("label_size"),
+                    settings
+                )
+
+                label_path = os.path.join(
+                    self.upload_folder,
+                    f"text_image_{uuid.uuid4().hex[:8]}.png"
+                )
+                canvas.save(label_path)
+                return label_path
+
             text_alignment = settings.get("text_alignment", "left")
             image_position = settings.get("image_position", "right")
             text_font_size = int(settings.get("text_font_size", settings.get("font_size", 30)))
@@ -3808,7 +3974,6 @@ class PrinterService:
             # axis to spend, so it always renders across.
             lengthwise = (
                 str(settings.get("orientation", "across")).lower() == "lengthwise"
-                and not (is_die_cut and label_height)
             )
 
             wrap = settings.get("text_wrap", True)
@@ -3877,7 +4042,18 @@ class PrinterService:
                 # height budget. Length is free, so nothing else constrains it.
                 while font_size > MIN_AUTO_FIT_FONT_SIZE:
                     ascent, descent = font.getmetrics()
-                    if 20 + len(wrapped) * (ascent + descent) <= width:
+                    fits_width = (
+                        20 + len(wrapped) * (ascent + descent) <= width
+                    )
+                    fits_length = (
+                        not (is_die_cut and label_height)
+                        or max(
+                            (measure_runs(measure_draw, runs, fonts)
+                             for runs in wrapped),
+                            default=0
+                        ) + 20 <= label_height
+                    )
+                    if fits_width and fits_length:
                         break
                     font_size -= 2
                     fonts = fonts.at_size(font_size)
@@ -3952,7 +4128,10 @@ class PrinterService:
                 # canvas as tall as the tape is wide, and the whole thing is
                 # rotated onto the tape once it is drawn. So here the canvas
                 # width is the tape *length* and grows with the longest line.
-                line_area = max((w for _, w in line_metrics), default=0) + 20
+                line_area = (
+                    label_height if is_die_cut and label_height
+                    else max((w for _, w in line_metrics), default=0) + 20
+                )
                 if line_area > MAX_LENGTHWISE_LENGTH_PX:
                     raise ValidationError(
                         f"Lengthwise label would need {line_area} px of tape "
@@ -4235,9 +4414,25 @@ class PrinterService:
         """
         try:
             with Image.open(image_path) as img:
-                # Fit to the medium: the printable width on continuous tape, the
-                # label's exact canvas on die-cut media (which convert() insists
-                # on) with the content centred inside it.
+
+                # Apply lengthwise orientation to rectangular die-cut labels.
+                # Rotate the source content BEFORE fitting it to the
+                # printer's fixed label dimensions.
+                geometry = get_label_geometry(label_size, settings)
+
+                orientation = str(
+                    (settings or {}).get("orientation", "across")
+                ).lower()
+
+                if (
+                    orientation == "lengthwise"
+                    and geometry.is_die_cut
+                    and not geometry.is_round
+                    and geometry.height
+                ):
+                    img = img.transpose(Image.Transpose.ROTATE_90)
+
+                # Fit the image to the label's native dimensions.
                 img = self._fit_to_label(img, label_size, settings)
 
                 # Save resized image
@@ -5526,6 +5721,25 @@ class PrinterService:
             #    (side-by-side, or text above/below). No-op if no text.
             qr_img = self._compose_qr_with_text(qr_img, data, settings)
 
+            # Apply lengthwise orientation to rectangular die-cut media.
+            geometry = get_label_geometry(
+                settings.get("label_size"),
+                settings
+            )
+
+            orientation = str(
+                settings.get("orientation", "across")
+            ).lower()
+
+            if (
+                orientation == "lengthwise"
+                and geometry.is_die_cut
+                and not geometry.is_round
+                and geometry.height
+            ):
+                # Rotate the QR + text composition, not the final label.
+                qr_img = qr_img.transpose(Image.Transpose.ROTATE_90)
+
             # 3. Fit the composition to the loaded media. The QR code is
             #    rendered at whatever qr_size asks for, which is a size the
             #    printer knows nothing about: on continuous tape it has to be
@@ -5635,6 +5849,148 @@ class PrinterService:
         ``qr_position`` selects whether the QR sits on the left or the right;
         ``text_alignment`` controls horizontal alignment of the text block.
         """
+
+        # Lengthwise Text + QR layout on rectangular die-cut labels.
+        label_size = settings.get("label_size")
+        geometry = get_label_geometry(label_size, settings)
+
+        lengthwise_diecut = (
+            str(settings.get("orientation", "across")).lower()
+            == "lengthwise"
+            and geometry.is_die_cut
+            and not geometry.is_round
+            and bool(geometry.height)
+        )
+
+        if lengthwise_diecut:
+            # Compose in landscape coordinates first.
+            # The existing QR renderer rotates this composition
+            # into the printer's fixed portrait canvas afterwards.
+            canvas_width = geometry.height
+            canvas_height = geometry.width
+
+            padding = 5
+            gap = 12
+
+            # Keep the QR square and preserve its quiet zone.
+            qr_side = min(
+                canvas_height - 2 * padding,
+                int(canvas_height * 0.95)
+            )
+
+            qr_img = qr_img.resize(
+                (qr_side, qr_side),
+                Image.Resampling.NEAREST
+            )
+
+            text_width = (
+                canvas_width - qr_side - 2 * padding - gap
+            )
+            text_height = canvas_height - 2 * padding
+
+            # Fit text within the available long dimension.
+            base_size = int(settings.get("text_font_size")
+                            or settings.get("font_size", 30))
+            max_size = min(
+                120,
+                max(base_size, canvas_height - 2 * padding)
+            )
+
+            draw_test = ImageDraw.Draw(qr_img)
+            wrap = settings.get("text_wrap", True)
+
+            for font_size in range(max_size, 7, -1):
+                font = ImageFont.truetype(
+                    self.font_path, font_size
+                )
+
+                if wrap:
+                    lines = self._wrap_text_to_width(
+                        side_text, font, text_width
+                    )
+                else:
+                    lines = side_text.split("\n")
+
+                spacing = 4
+                line_height = sum(font.getmetrics()) + spacing
+                block_height = (
+                    len(lines) * line_height - spacing
+                )
+
+                widest = max(
+                    (
+                        draw_test.textbbox(
+                            (0, 0), line, font=font
+                        )[2]
+                        for line in lines
+                    ),
+                    default=0
+                )
+
+                if (
+                    block_height <= text_height
+                    and widest <= text_width
+                ):
+                    break
+
+            canvas = Image.new(
+                "RGB",
+                (canvas_width, canvas_height),
+                "white"
+            )
+
+            draw = ImageDraw.Draw(canvas)
+
+            qr_position = settings.get(
+                "qr_position", "right"
+            )
+
+            if qr_position == "left":
+                qr_x = padding
+                text_x = padding + qr_side + gap
+            else:
+                qr_x = canvas_width - padding - qr_side
+                text_x = padding
+
+            qr_y = (canvas_height - qr_side) // 2
+            canvas.paste(qr_img, (qr_x, qr_y))
+
+            # Centre the text vertically.
+            text_y = max(
+                padding,
+                (canvas_height - block_height) // 2
+            )
+
+            text_alignment = settings.get(
+                "text_alignment", "center"
+            )
+
+            for line in lines:
+                bbox = draw.textbbox(
+                    (0, 0), line, font=font
+                )
+                line_width = bbox[2] - bbox[0]
+
+                if text_alignment == "right":
+                    x = text_x + text_width - line_width
+                elif text_alignment == "center":
+                    x = text_x + (
+                        text_width - line_width
+                    ) // 2
+                else:
+                    x = text_x
+
+                draw.text(
+                    (x, text_y - bbox[1]),
+                    line,
+                    font=font,
+                    fill="black"
+                )
+
+                text_y += line_height
+
+            return canvas
+
         text_alignment = settings.get("text_alignment", "center")  # Text alignment: "left", "center", or "right"
         qr_position = settings.get("qr_position", "right")  # Position of QR code: "left" or "right"
 
