@@ -702,6 +702,7 @@ body.dark-mode .btn-print { color: #06222B; }
     max-width: 320px;
     text-align: center;
     line-height: 1.6;
+}
 
 /* The client previews are a CSS approximation drawn with browser fonts and
    layout -- they are NOT what prints, and they routinely disagree with the

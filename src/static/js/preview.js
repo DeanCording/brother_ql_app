@@ -77,19 +77,19 @@ function updatePreviewMediumUI() {
 /**
  * Check if all previews are empty/hidden
  *
- * Counts `preview-server` too: with a server render on screen the panel is not
+ * Counts `preview-stage` too: with a server render on screen the panel is not
  * empty, so the "Enter content..." placeholder must not be un-hidden on top of
  * it.
  */
 function areAllPreviewsEmpty() {
-    const previewServer = document.getElementById('preview-server');
+    const previewStage = document.getElementById('preview-stage');
     const previewText = document.getElementById('preview-text');
     const previewImage = document.getElementById('preview-image');
     const previewQrcode = document.getElementById('preview-qrcode');
     const previewLabel = document.getElementById('preview-label');
 
     return (
-        (!previewServer || previewServer.classList.contains('d-none')) &&
+        (!previewStage || previewStage.classList.contains('d-none')) &&
         (!previewText || previewText.classList.contains('d-none')) &&
         (!previewImage || previewImage.classList.contains('d-none')) &&
         (!previewQrcode || previewQrcode.classList.contains('d-none')) &&
@@ -125,7 +125,7 @@ function setPreviewDraft(isDraft, pending = true) {
 /**
  * Hide all previews except the specified one
  *
- * `preview-server` is included: it is a sibling in the same preview container,
+ * `preview-stage` is included: it is a sibling in the same preview container,
  * so a server render left over from a previous keystroke would otherwise stay
  * visible *underneath* the client preview being shown here, stacking two
  * labels in the panel until the next debounced render replaced it. The server
@@ -136,7 +136,7 @@ function setPreviewDraft(isDraft, pending = true) {
  * leaves it via showServerPreview().
  */
 function hideOtherPreviews(exceptId) {
-    const allPreviews = ['preview-server', 'preview-text', 'preview-image',
+    const allPreviews = ['preview-stage', 'preview-text', 'preview-image',
                          'preview-qrcode', 'preview-label'];
     const previewPlaceholder = document.getElementById('preview-placeholder');
 
@@ -148,7 +148,7 @@ function hideOtherPreviews(exceptId) {
     });
 
     // A client preview is provisional; the server render is not.
-    setPreviewDraft(exceptId !== 'preview-server' && exceptId !== 'pdf-preview');
+    setPreviewDraft(exceptId !== 'preview-stage' && exceptId !== 'pdf-preview');
 
     // Hide placeholder when showing any preview
     if (previewPlaceholder) previewPlaceholder.classList.add('d-none');
