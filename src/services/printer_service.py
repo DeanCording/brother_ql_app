@@ -2413,7 +2413,7 @@ class PrinterService:
             return cached
 
         if not printer_uri or guess_backend(printer_uri) != "network":
-            # USB and kernel-backed printers offer no status channel at all.
+            # USB is determined elsewhere and kernel-backed printers offer no status channel at all.
             return dict(EMPTY_MEDIA)
         try:
             validate_printer_uri(printer_uri)
@@ -2640,7 +2640,7 @@ class PrinterService:
             if len(raw) < STATUS_PACKET_BYTES:
                 return None
 
-            logger.info("Raw status: ",raw=' '.join('{:02X}'.format(byte) for byte in raw))
+            logger.debug("Raw status: ",raw=' '.join('{:02X}'.format(byte) for byte in raw))
             return interpret_response(raw)
 
         except Exception as e:
@@ -2831,7 +2831,7 @@ class PrinterService:
             # mismatched job is discarded without a word.
             live = self.read_usb_printer_status(printer_uri)
 
-            logger.info("USB Status:", live=live)
+            logger.debug("USB Status:", live=live)
 
             if live:
                 loaded_width = live.get("media_width")
@@ -2900,11 +2900,11 @@ class PrinterService:
 
 
             return self._status_response(
-                reachable=True,
+                reachable=False,
                 state="ready",
                 status="Printer is ready",
                 details=details,
-                media=media,
+                media_unavailable=MEDIA_DETECTION_UNSUPPORTED,
                 label_size=label_size,
                 settings=settings,
             )
@@ -5574,7 +5574,7 @@ class PrinterService:
 
         # TODO - Fix this to work
 
-        """ usb_status = self.read_usb_printer_status(printer_uri)
+        usb_status = self.read_usb_printer_status(printer_uri)
         if usb_status:
             reported_errors = usb_status.get("errors") or []
             if reported_errors:
@@ -5584,7 +5584,7 @@ class PrinterService:
             if mismatch:
                 raise PrinterError(
                     f"{mismatch}. Load the matching roll, or choose a label "
-                    f"size that fits the media already in the printer.") """
+                    f"size that fits the media already in the printer.")
 
         # --- Printer/IO phase (-> PrinterError -> 500) ---
         try:
