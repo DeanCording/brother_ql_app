@@ -233,9 +233,12 @@ def test_a_usb_printer_is_ready_but_cannot_report_media():
 
     with patch("src.services.printer_service.guess_backend", return_value="pyusb"), \
          patch("src.services.printer_service.backend_factory",
-               return_value={"backend_class": _Backend}):
+               return_value={"backend_class": _Backend}), \
+         patch.object(printer_service, "read_usb_printer_status",
+                      return_value=None) as read_status:
         result = printer_service.check_printer_status("usb://0x04f9:0x209b", "QL-820NWB")
 
+    read_status.assert_called_once_with("usb://0x04f9:0x209b")
     assert result["reachable"] is True
     assert result["available"] is True
     assert result["state"] == "ready"

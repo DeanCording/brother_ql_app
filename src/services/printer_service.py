@@ -2551,6 +2551,7 @@ class PrinterService:
         configured = settings.get("label_size")
         return str(configured) if configured else None
 
+    @staticmethod
     def read_usb_printer_status(printer_uri: str, timeout_ms: int = 5000):
         """Ask a USB-attached QL what media is loaded and whether it reports errors.
 
@@ -2635,9 +2636,11 @@ class PrinterService:
             endpoint_out.write(b"\x1b\x40", timeout=timeout_ms)
             endpoint_out.write(b"\x1b\x69\x53", timeout=timeout_ms)
             time.sleep(STATUS_READ_SETTLE_SECONDS)
-            raw = bytes(endpoint_in.read(STATUS_PACKET_BYTES, timeout=timeout_ms))
+            raw = bytes(endpoint_in.read(STATUS_PACKET_BYTES+16, timeout=timeout_ms))
             if len(raw) < STATUS_PACKET_BYTES:
                 return None
+
+            logger.info("Raw status: ",raw=' '.join('{:02X}'.format(byte) for byte in raw))
             return interpret_response(raw)
 
         except Exception as e:
@@ -2655,7 +2658,9 @@ class PrinterService:
                 pass
 
 
-    def describe_media_mismatch(label_size: Optional[str], status: Optional[Dict[str, Any]]):
+    @staticmethod
+    def describe_media_mismatch(label_size: Optional[str],
+                                status: Optional[Dict[str, Any]]):
         """Return why ``label_size`` cannot print on the reported media, else None.
 
         Width is the load-bearing check: the printer refuses, silently, when the
@@ -2833,7 +2838,7 @@ class PrinterService:
                 loaded_length = live.get("media_length")
                 errors = live.get("errors") or []
                 details.update({
-                    "source": "usb-status",
+                    "source": "media-ready",
                     "media_type": live.get("media_type"),
                     "media_width_mm": loaded_width,
                     "media_length_mm": loaded_length,
@@ -2880,7 +2885,7 @@ class PrinterService:
                     width_mm=float(loaded_width),
                     length_mm=float(loaded_length),
                     media_type=live.get("media_type"),
-                    source="usb-status",
+                    source="media-ready",
                 )
 
                 return self._status_response(
@@ -2899,16 +2904,11 @@ class PrinterService:
                 state="ready",
                 status="Printer is ready",
                 details=details,
-                media_unavailable=MEDIA_DETECTION_UNSUPPORTED,
+                media=media,
                 label_size=label_size,
                 settings=settings,
             )
 
-            return {
-                "available": True,
-                "status": "Printer is ready",
-                "details": details,
-            }
         except Exception as e:
             logger.error("Error checking printer status",
                         printer_uri=printer_uri,
@@ -6781,6 +6781,10 @@ class PrinterService:
 
 # Create a singleton instance
 printer_service = PrinterService()
+
+# These helpers are also used by print_guard and imported directly by tests.
+read_usb_printer_status = PrinterService.read_usb_printer_status
+describe_media_mismatch = PrinterService.describe_media_mismatch
 
 # Let a settings write remember which label type was chosen for the loaded
 # medium. The dependency only runs this way -- this module already imports the
