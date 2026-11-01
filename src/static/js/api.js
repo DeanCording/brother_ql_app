@@ -111,6 +111,7 @@ function refreshComposerMode() {
             submitBtn.parentNode.insertBefore(saveBtn, submitBtn);
         }
     });
+}
 
 /**
  * Diameter in mm of a round die-cut label type.
@@ -3153,4 +3154,4 @@ document.addEventListener('change', event => {
         const mode = getActiveComposeMode();
         if (mode) requestServerPreview(mode);
     }
-});
+})
