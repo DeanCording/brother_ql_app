@@ -4286,11 +4286,6 @@ class PrinterService:
                 str(settings.get("orientation", "across")).lower() == "lengthwise"
             )
 
-            # Resolved once: the fit loop below reloads the face at a dozen
-            # sizes, and re-running catalog lookup for each is pure overhead.
-            font_path = self._resolve_font_path(settings)
-            font = self._font_at(font_path, font_size)
-
             wrap = settings.get("text_wrap", True)
             auto_fit = settings.get("auto_fit", True)
 
@@ -4300,8 +4295,9 @@ class PrinterService:
             # made. On, the base drops to the regular weight so **bold** has
             # something to be heavier than -- see src/utils/text_markup.py.
             markup = markup_enabled(settings)
-            fonts = FontSet(self.font_path, font_size, markup)
-            font = fonts.regular
+            font_path = self._resolve_font_path(settings)
+            fonts = FontSet(font_path, font_size, markup)
+            font = self._font_at(font_path, font_size)
             # A newline inside a line is a line break too. Pillow's draw.text()
             # quietly renders one, but it refuses to *measure* multiline text --
             # and measuring is what everything here does first. Split only on
@@ -4348,21 +4344,9 @@ class PrinterService:
                     return widest_word(measure_draw, line_runs, current_fonts)
                 return self._widest_word(lines, current_fonts.regular)
 
-            # How the font size is treated. See _resolve_scale_mode: the point
-            # of scale_mode is that font_size is an INPUT, not a hint, unless
-            # the caller explicitly asks for it to be re-derived.
-            #
-            #   actual  -- honour font_size exactly; content may overflow/crop
-            #   fit     -- shrink to fit the medium (the historical auto_fit)
-            #   custom  -- font_size * scale_percent/100, then honoured exactly
-            #
-            # Rotation deliberately does NOT influence this. Laying a label out
-            # lengthwise and scaling it to fit are two separate decisions, and
-            # having one imply the other is what made the old behaviour
-            # surprising: setting a font size and then rotating silently
-            # replaced the size you set.
+            wrapped = wrap_all(fonts)
+
             requested_font_size = font_size
-            scale_mode, font_size = self._resolve_scale_mode(settings, font_size)
             if font_size != requested_font_size:
                 # Only `custom` changes the size here; re-render at the scaled
                 # size before any fitting logic looks at it.
