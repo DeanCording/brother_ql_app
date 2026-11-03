@@ -1,18 +1,17 @@
 # Brother QL Printer App
 
-[![Stars](https://img.shields.io/github/stars/Dodoooh/brother_ql_app)](https://github.com/Dodoooh/brother_ql_app/stargazers)
-[![CI](https://img.shields.io/github/actions/workflow/status/Dodoooh/brother_ql_app/ci.yml?branch=main&label=CI)](https://github.com/Dodoooh/brother_ql_app/actions/workflows/ci.yml)
-[![Docker Pulls](https://img.shields.io/docker/pulls/dodoooh/brother_ql_app)](https://hub.docker.com/r/dodoooh/brother_ql_app)
-[![Image size](https://img.shields.io/docker/image-size/dodoooh/brother_ql_app/dev?label=image)](https://hub.docker.com/r/dodoooh/brother_ql_app/tags)
-[![Release](https://img.shields.io/github/v/release/dodoooh/brother_ql_app)](https://github.com/dodoooh/brother_ql_app/releases)
-[![Issues](https://img.shields.io/github/issues/Dodoooh/brother_ql_app)](https://github.com/Dodoooh/brother_ql_app/issues)
+[![Stars](https://img.shields.io/github/stars/Dodoooh/brother_ql_app)](https://github.com/DeanCording/brother_ql_app/stargazers)
+[![Image size](https://img.shields.io/docker/image-size/DeanCording/brother_ql_app/dev?label=image)](https://hub.docker.com/r/DeanCording/brother_ql_app/tags)
+[![Release](https://img.shields.io/github/v/release/DeanCording/brother_ql_app)](https://github.com/DeanCording/brother_ql_app/releases)
+[![Issues](https://img.shields.io/github/issues/DeanCording/brother_ql_app)](https://github.com/DeanCording/brother_ql_app/issues)
 [![Licence](https://img.shields.io/badge/licence-CC%20BY--NC--SA%204.0-lightgrey)](LICENSE)
 
 A web interface and REST API for Brother QL label printers. Compose a label in
 the browser or send it from a script. The app renders it, queues it and prints
 it over the network, over USB, or through a Linux device node.
 
-[![Demo](https://img.shields.io/badge/DEMO-open%20in%20your%20browser-22d3ee?style=for-the-badge)](https://dodoooh.github.io/brother_ql_app/)
+This is a fork of [[Dodoooh/brother_ql_app]](https://github.com/Dodoooh/brother_ql_app) and incorporating many of the changes made in the [[MSanteler/brother_ql_app]](https://github.com/MSanteler/brother_ql_app) fork.  As these two projects have diverged over time, some of the changes were incompatible and have been omitted.  Both projects made extensive use of vibe coding, so manually combining them was a bit of a challenge and I can't guarantee everything is correct.
+
 
 [![The compose view, light theme on the left and dark on the right](doc/images/compose-themes.png)](https://dodoooh.github.io/brother_ql_app/)
 
