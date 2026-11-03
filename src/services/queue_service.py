@@ -472,7 +472,7 @@ class PrintQueueService:
             "type": job_type,
             "status": "held",
             "label": label,
-            "created_at": _now_iso(),
+            "created_at": now_iso(),
             "started_at": None,
             "finished_at": None,
             "error": None,
@@ -566,6 +566,7 @@ class PrintQueueService:
                 raise ValueError("held job has no executor; open it in the composer")
             job["status"] = "queued"
             job["can_reprint"] = True
+            job["can_release"] = False
         self._queue.put((job_id, fn))
         logger.info("Held print job released", job_id=job_id, type=job["type"])
         return job_id

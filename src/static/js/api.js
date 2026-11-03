@@ -2344,9 +2344,8 @@ function renderJobs(jobs) {
         const openBtn = openSupport.supported
             ? `<button type="button" class="btn-ghost btn-sm queue-open" data-action="open" data-job-id="${escapeHtml(job.id)}"><i class="bi bi-box-arrow-up-right"></i> Open</button>`
             : `<button type="button" class="btn-ghost btn-sm queue-open" data-action="open" data-job-id="${escapeHtml(job.id)}" aria-disabled="true" title="${escapeHtml(openSupport.reason)}"><i class="bi bi-box-arrow-up-right"></i> Open</button>`;
-        const reprintBtns = job.can_reprint === true
-            ? `<button type="button" class="btn-ghost btn-sm queue-reprint" data-action="reprint" data-job-id="${escapeHtml(job.id)}"><i class="bi bi-arrow-clockwise"></i> Reprint</button>` +
-              openBtn
+        const reprintBtn = job.can_reprint === true
+            ? `<button type="button" class="btn-ghost btn-sm queue-reprint" data-action="reprint" data-job-id="${escapeHtml(job.id)}"><i class="bi bi-arrow-clockwise"></i> Reprint</button>`
             : '';
         // Print is the whole point of holding: it releases the job through the
         // normal print path, where the media guard runs against whatever roll
@@ -2354,6 +2353,7 @@ function renderJobs(jobs) {
         const releaseBtn = job.can_release === true
             ? `<button type="button" class="btn-ghost btn-sm queue-release" data-action="release" data-job-id="${escapeHtml(job.id)}"><i class="bi bi-printer"></i> Print</button>`
             : '';
+        const reprintBtns = reprintBtn + releaseBtn + openBtn;
         // Delete is available for any job that is not currently printing.
         const deleteBtn = job.status !== 'printing'
             ? `<button type="button" class="btn-ghost btn-sm queue-delete" data-action="delete" data-job-id="${escapeHtml(job.id)}" data-job-status="${escapeHtml(job.status || '')}" title="Delete job"><i class="bi bi-trash3"></i></button>`
