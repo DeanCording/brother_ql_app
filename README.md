@@ -1,6 +1,6 @@
 # Brother QL Printer App
 
-[![Stars](https://img.shields.io/github/stars/Dodoooh/brother_ql_app)](https://github.com/DeanCording/brother_ql_app/stargazers)
+[![Stars](https://img.shields.io/github/stars/DeanCording/brother_ql_app)](https://github.com/DeanCording/brother_ql_app/stargazers)
 [![Image size](https://img.shields.io/docker/image-size/DeanCording/brother_ql_app/dev?label=image)](https://hub.docker.com/r/DeanCording/brother_ql_app/tags)
 [![Release](https://img.shields.io/github/v/release/DeanCording/brother_ql_app)](https://github.com/DeanCording/brother_ql_app/releases)
 [![Issues](https://img.shields.io/github/issues/DeanCording/brother_ql_app)](https://github.com/DeanCording/brother_ql_app/issues)
@@ -13,7 +13,7 @@ it over the network, over USB, or through a Linux device node.
 This is a fork of [[Dodoooh/brother_ql_app]](https://github.com/Dodoooh/brother_ql_app) and incorporating many of the changes made in the [[MSanteler/brother_ql_app]](https://github.com/MSanteler/brother_ql_app) fork.  As these two projects have diverged over time, some of the changes were incompatible and have been omitted.  Both projects made extensive use of vibe coding, so manually combining them was a bit of a challenge and I can't guarantee everything is correct.
 
 
-[![The compose view, light theme on the left and dark on the right](doc/images/compose-themes.png)](https://dodoooh.github.io/brother_ql_app/)
+[![The compose view, light theme on the left and dark on the right](doc/images/compose-themes.png)]
 
 - **🖼 Image Printing**: Upload and print images effortlessly to create visually appealing labels.
 
