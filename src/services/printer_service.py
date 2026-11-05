@@ -2821,6 +2821,7 @@ class PrinterService:
         finally:
             sock.close()
 
+    @staticmethod
     def read_printer_media_status(printer_uri: str):
         """The printer's own report of its media, from whichever channel has one.
 
@@ -6387,9 +6388,7 @@ class PrinterService:
             wrap = settings.get("text_wrap", True)
 
             for font_size in range(max_size, 7, -1):
-                font = ImageFont.truetype(
-                    self.font_path, font_size
-                )
+                font = self._load_font(settings, font_size, prefix="text_")
 
                 if wrap:
                     lines = self._wrap_text_to_width(
@@ -7010,6 +7009,7 @@ printer_service = PrinterService()
 # These helpers are also used by print_guard and imported directly by tests.
 read_usb_printer_status = PrinterService.read_usb_printer_status
 describe_media_mismatch = PrinterService.describe_media_mismatch
+read_printer_media_status = PrinterService.read_printer_media_status
 
 # Let a settings write remember which label type was chosen for the loaded
 # medium. The dependency only runs this way -- this module already imports the

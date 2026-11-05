@@ -3118,6 +3118,8 @@ async function openJob(jobId) {
             // fallback for anything a future server stops sending.
             applySettingsToForm(settings);
             setFieldValue('textimage-text', params.text);
+            setFontFamilyValue('textimage-font-family', settings.font_family || '');
+            setFieldValue('textimage-font-style', settings.font_style);
             const fontSize = params.font_size != null ? params.font_size : settings.text_font_size;
             setFieldValue('textimage-font-size', fontSize != null ? String(fontSize) : null);
             setFieldValue('textimage-alignment', params.alignment || settings.text_alignment);
